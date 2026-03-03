@@ -1,6 +1,23 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const Database = require('better-sqlite3');
+const express = require('express'); // ADDED for Render
+
+// ADDED - Web server for Render (REQUIRED)
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('CardVault Bot is running!');
+});
+
+app.listen(port, () => {
+    console.log(`🌐 Web server listening on port ${port}`);
+});
+// END of Render web server
+
+// IMPORTANT: Database will reset on every Render restart (temporary)
 const db = new Database('cardvault.db');
+console.log('⚠️  Warning: Database resets on every restart! Use external DB for persistence.');
 
 // Create tables if they don't exist
 db.exec(`
@@ -98,11 +115,12 @@ const sessions = new Map();
 client.once('ready', () => {
     console.log(`✅ CardVault is online! Logged in as ${client.user.tag}`);
     console.log(`📊 Serving ${client.guilds.cache.size} servers`);
-    console.log(`💾 Database connected: cardvault.db`);
+    console.log(`💾 Database connected: cardvault.db (Temporary - Resets on restart)`);
+    console.log(`🌐 Web server running on port ${port}`);
     client.user.setActivity('💰 !sell | DM to sell', { type: 'WATCHING' });
 });
 
-// Handle DM conversations (selling process) - DEFINED BEFORE message handler
+// Handle DM conversations (selling process)
 async function handleDM(message) {
     console.log('='.repeat(50));
     console.log('🚨 handleDM FUNCTION WAS CALLED!');
@@ -601,7 +619,7 @@ client.on('messageCreate', async (message) => {
     // ADMIN COMMANDS (Only for you)
     // ============================================
     
-    // !pending - List all pending transactions (FIXED QUOTES)
+    // !pending - List all pending transactions
     if (command === 'pending' && isAdmin) {
         try {
             const stmt = db.prepare("SELECT * FROM transactions WHERE status = 'pending' ORDER BY submittedAt DESC");
