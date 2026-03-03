@@ -139,37 +139,22 @@ client.once('ready', () => {
     });
 });
 
-// ============================================
-// SIMPLIFIED HANDLE DM FUNCTION
-// ============================================
+// Handle DM conversations
 async function handleDM(message) {
-    console.log('\n' + '🚨'.repeat(50));
-    console.log(`🚨 handleDM STARTED at ${new Date().toLocaleTimeString()}`);
-    console.log('🚨'.repeat(50));
-    console.log(`User: ${message.author.tag} (${message.author.id})`);
-    console.log(`Message: "${message.content}"`);
-    console.log('🚨'.repeat(50) + '\n');
-    
     const userId = message.author.id;
     const content = message.content.toLowerCase().trim();
     
     try {
-        // STEP 1: Check if they said "sell"
+        // Check if they said "sell"
         if (content === 'sell') {
-            console.log('✅ User typed "sell" - checking registration');
-            
             // Check if registered
             const userData = getUser(userId);
-            console.log('📊 User data:', userData);
             
             if (!userData || !userData.registered) {
-                console.log('❌ User not registered');
                 return message.reply('❌ You need to register first! Go to the server and type `!register`');
             }
             
-            console.log('✅ User is registered! Sending payment options...');
-            
-            // SIMPLE REPLY - Just ask for payment method
+            // Ask for payment method
             const paymentEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('💳 Choose Payment Method')
@@ -187,15 +172,13 @@ async function handleDM(message) {
             return message.reply({ embeds: [paymentEmbed] });
         }
         
-        // STEP 2: Check if they're in a session
+        // Check if they're in a session
         if (sessions.has(userId)) {
             const session = sessions.get(userId);
-            console.log(`🔄 User in session step: ${session.step}`);
             
             if (session.step === 1) {
-                // They're choosing payment method
+                // Choosing payment method
                 if (content === '1' || content === '2' || content === '3') {
-                    // Map to payment method
                     const method = content === '1' ? 'paypal' : content === '2' ? 'bitcoin' : 'bank';
                     session.data.paymentMethod = method;
                     
@@ -217,7 +200,6 @@ async function handleDM(message) {
                         return message.reply('❌ You need to set your bank details first! Use `!bank "Name" 0123456789 BankName` in the server.');
                     }
                     
-                    // They have payment details, move to next step
                     session.step = 2;
                     return message.reply(`**Great! Now tell me the card brand** (e.g., Amazon, Visa, Steam, etc.)`);
                 } else {
@@ -226,14 +208,14 @@ async function handleDM(message) {
             }
             
             if (session.step === 2) {
-                // Save brand and ask for value
+                // Save brand
                 session.data.brand = message.content;
                 session.step = 3;
                 return message.reply(`**What is the card value?** (e.g., 25, 50, 100)`);
             }
             
             if (session.step === 3) {
-                // Save value and ask for image
+                // Save value
                 const value = parseInt(message.content);
                 if (isNaN(value) || value <= 0) {
                     return message.reply('❌ Please enter a valid number (e.g., 25, 50, 100)');
@@ -249,10 +231,8 @@ async function handleDM(message) {
                     return message.reply('❌ Please upload an image of the card');
                 }
                 
-                // Process completed submission
+                // Process submission
                 const image = message.attachments.first();
-                
-                // Generate transaction ID
                 const txId = 'CV-' + Date.now().toString(36).toUpperCase();
                 
                 // Save to database
@@ -267,6 +247,25 @@ async function handleDM(message) {
                     status: 'pending',
                     submittedAt: Date.now()
                 });
+                
+                // Notify admin channel
+                const adminChannel = client.channels.cache.find(c => c.name === 'admin');
+                if (adminChannel) {
+                    const adminEmbed = new EmbedBuilder()
+                        .setColor(0xFFA500)
+                        .setTitle('🆕 New Gift Card Submission')
+                        .addFields(
+                            { name: '🆔 Transaction', value: txId, inline: true },
+                            { name: '👤 User', value: message.author.username, inline: true },
+                            { name: '💳 Payment', value: session.data.paymentMethod, inline: true },
+                            { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true }
+                        )
+                        .setImage(image.url)
+                        .setFooter({ text: `User ID: ${userId}` })
+                        .setTimestamp();
+                    
+                    await adminChannel.send({ embeds: [adminEmbed] });
+                }
                 
                 // Clear session
                 sessions.delete(userId);
@@ -286,88 +285,40 @@ async function handleDM(message) {
             }
         }
         
-        // Default response if not "sell" and no session
+        // Default response
         return message.reply('Welcome to CardVault! To sell a gift card, type **sell**');
         
     } catch (error) {
-        console.error('❌ ERROR in handleDM:', error);
+        console.error('❌ Error in handleDM:', error);
         return message.reply('❌ An error occurred. Please try again.');
     }
 }
-// ============================================
-// END OF HANDLE DM FUNCTION
-// ============================================
 
-// ULTRA DEBUG MESSAGE HANDLER
+// Main message handler
 client.on('messageCreate', async (message) => {
-    // Log EVERY single message in extreme detail
-    console.log('\n' + '🔥'.repeat(60));
-    console.log(`🔥 MAIN HANDLER TRIGGERED at ${new Date().toLocaleTimeString()}`);
-    console.log('🔥'.repeat(60));
-    console.log(`📨 Author: ${message.author.tag} (${message.author.id})`);
-    console.log(`📝 Content: "${message.content}"`);
-    console.log(`🏠 Is DM? ${message.guild === null}`);
-    console.log(`🤖 Is Bot? ${message.author.bot}`);
-    console.log(`📊 Channel Type: ${message.channel.type}`);
-    console.log(`🌍 Guild: ${message.guild ? message.guild.name : 'None (DM)'}`);
-    console.log('🔥'.repeat(60) + '\n');
-    
     // Ignore bot messages
-    if (message.author.bot) {
-        console.log('🤖 Ignoring bot message');
-        return;
-    }
+    if (message.author.bot) return;
     
-    // HANDLE DMs - FIXED DETECTION
+    // Handle DMs
     if (message.guild === null) {
-        console.log('🎯🎯🎯 DM DETECTED - CALLING handleDM');
-        console.log(`🎯 Calling handleDM with message: "${message.content}"`);
-        
-        try {
-            await handleDM(message);
-            console.log('✅ handleDM completed successfully');
-        } catch (error) {
-            console.error('❌ CRASH in handleDM:', error);
-        }
+        await handleDM(message);
         return;
     }
     
     // Handle server commands
-    console.log('📢 Server message - checking for commands');
-    if (!message.content.startsWith(PREFIX)) {
-        console.log('❌ No prefix, ignoring');
-        return;
-    }
+    if (!message.content.startsWith(PREFIX)) return;
     
-    console.log('✅ Command detected');
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
-    console.log(`📋 Command: ${command}`);
-    
     const isAdmin = message.author.id === ADMIN_ID;
     
-    // Test commands
+    // Test command
     if (command === 'ping') {
-        console.log('🏓 Pong command');
         return message.reply('Pong! 🏓 Bot is working!');
-    }
-    
-    if (command === 'dmtest') {
-        console.log('📨 DM test command');
-        try {
-            await message.author.send('✅ DM working! CardVault can message you.');
-            message.reply('Check your DMs!');
-            console.log('✅ Test DM sent');
-        } catch (error) {
-            console.log('❌ DM test failed:', error.message);
-            message.reply('❌ I could not DM you. Please enable DMs from server members.');
-        }
-        return;
     }
     
     // User commands
     if (command === 'register') {
-        console.log('📝 Register command');
         setUser(message.author.id, {
             registered: 1,
             registeredAt: Date.now()
@@ -474,27 +425,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    if (command === 'online') {
-        const members = message.guild.members.cache;
-        const online = members.filter(m => m.presence?.status === 'online').size;
-        const idle = members.filter(m => m.presence?.status === 'idle').size;
-        const dnd = members.filter(m => m.presence?.status === 'dnd').size;
-        const offline = members.filter(m => !m.presence || m.presence?.status === 'offline').size;
-        
-        const embed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle(`🟢 Online Status - ${message.guild.name}`)
-            .addFields(
-                { name: '🟢 Online', value: `${online}`, inline: true },
-                { name: '🟡 Idle', value: `${idle}`, inline: true },
-                { name: '🔴 Do Not Disturb', value: `${dnd}`, inline: true },
-                { name: '⚫ Offline', value: `${offline}`, inline: true }
-            )
-            .setTimestamp();
-        
-        return message.reply({ embeds: [embed] });
-    }
-    
     if (command === 'users') {
         const members = message.guild.members.cache
             .filter(m => !m.user.bot && m.user.id !== client.user.id)
@@ -506,22 +436,6 @@ client.on('messageCreate', async (message) => {
             .setColor(0x0099FF)
             .setTitle(`👤 Human Members (first 20)`)
             .setDescription(members || 'No humans found')
-            .setTimestamp();
-        
-        return message.reply({ embeds: [embed] });
-    }
-    
-    if (command === 'bots') {
-        const bots = message.guild.members.cache
-            .filter(m => m.user.bot)
-            .map(m => m.user.username)
-            .slice(0, 20)
-            .join('\n');
-        
-        const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
-            .setTitle(`🤖 Bots in Server (first 20)`)
-            .setDescription(bots || 'No bots found')
             .setTimestamp();
         
         return message.reply({ embeds: [embed] });
@@ -550,54 +464,15 @@ client.on('messageCreate', async (message) => {
             const embed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle(`⏳ Pending Transactions (${pending.length})`)
-                .setDescription(description || 'None')
+                .setDescription(description)
                 .setFooter({ text: 'Use !approve TXID amount or !reject TXID reason' })
                 .setTimestamp();
             
             return message.reply({ embeds: [embed] });
         } catch (error) {
             console.error('Database error:', error);
-            return message.reply('❌ Error fetching transactions. Check the console.');
+            return message.reply('❌ Error fetching transactions.');
         }
-    }
-    
-    if (command === 'transaction' && isAdmin) {
-        const txId = args[0];
-        if (!txId) {
-            return message.reply('❌ Usage: `!transaction TX-ID`');
-        }
-        
-        const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
-        const tx = stmt.get(txId);
-        
-        if (!tx) {
-            return message.reply('❌ Transaction not found!');
-        }
-        
-        let paymentMethodDisplay = '';
-        switch(tx.paymentMethod) {
-            case 'paypal': paymentMethodDisplay = '💳 PayPal'; break;
-            case 'bitcoin': paymentMethodDisplay = '₿ Bitcoin'; break;
-            case 'bank': paymentMethodDisplay = '🇳🇬 Bank Transfer'; break;
-        }
-        
-        const date = new Date(tx.submittedAt).toLocaleString();
-        
-        const embed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle(`📋 Transaction: ${tx.txId}`)
-            .addFields(
-                { name: '👤 User', value: tx.username, inline: true },
-                { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
-                { name: '💳 Payment', value: paymentMethodDisplay, inline: true },
-                { name: '📍 Payment Details', value: tx.paymentDetail, inline: false },
-                { name: '📊 Status', value: tx.status, inline: true },
-                { name: '📅 Submitted', value: date, inline: true }
-            )
-            .setImage(tx.image)
-            .setTimestamp();
-        
-        return message.reply({ embeds: [embed] });
     }
     
     if (command === 'approve' && isAdmin) {
@@ -605,7 +480,7 @@ client.on('messageCreate', async (message) => {
         const amount = parseInt(args[1]);
         
         if (!txId || !amount) {
-            return message.reply('❌ Usage: `!approve TX-ID AMOUNT`\nExample: `!approve CV-ABC123 40`');
+            return message.reply('❌ Usage: `!approve TX-ID AMOUNT`');
         }
         
         const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
@@ -629,12 +504,10 @@ client.on('messageCreate', async (message) => {
                     .setColor(0x00FF00)
                     .setTitle('✅ Card Approved!')
                     .addFields(
-                        { name: '🆔 Transaction', value: txId, inline: true },
-                        { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
-                        { name: '💰 Our Offer', value: `$${amount}`, inline: true }
+                        { name: '🆔 Transaction', value: txId },
+                        { name: '💰 Offer', value: `$${amount}` }
                     )
-                    .setDescription(`We offer $${amount} for your gift card.\n\nAn admin will process payment soon.`)
-                    .setTimestamp();
+                    .setDescription('An admin will process payment soon.');
                 
                 await user.send({ embeds: [offerEmbed] });
             }
@@ -642,18 +515,7 @@ client.on('messageCreate', async (message) => {
             console.log('Could not DM user');
         }
         
-        const confirmEmbed = new EmbedBuilder()
-            .setColor(0x00FF00)
-            .setTitle('✅ Card Approved')
-            .addFields(
-                { name: '🆔 Transaction', value: txId, inline: true },
-                { name: '💰 Offer', value: `$${amount}`, inline: true },
-                { name: '👤 User', value: tx.username, inline: true }
-            )
-            .setDescription(`User has been notified. Use \`!paid ${txId}\` after sending payment.`)
-            .setTimestamp();
-        
-        return message.reply({ embeds: [confirmEmbed] });
+        return message.reply(`✅ Transaction ${txId} approved for $${amount}`);
     }
     
     if (command === 'reject' && isAdmin) {
@@ -661,7 +523,7 @@ client.on('messageCreate', async (message) => {
         const reason = args.slice(1).join(' ') || 'No reason provided';
         
         if (!txId) {
-            return message.reply('❌ Usage: `!reject TX-ID REASON`\nExample: `!reject CV-ABC123 Invalid card`');
+            return message.reply('❌ Usage: `!reject TX-ID REASON`');
         }
         
         const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
@@ -685,11 +547,9 @@ client.on('messageCreate', async (message) => {
                     .setColor(0xFF0000)
                     .setTitle('❌ Card Rejected')
                     .addFields(
-                        { name: '🆔 Transaction', value: txId, inline: true },
-                        { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
-                        { name: '📋 Reason', value: reason, inline: false }
+                        { name: '🆔 Transaction', value: txId },
+                        { name: '📋 Reason', value: reason }
                     )
-                    .setDescription('Your gift card could not be accepted.')
                     .setTimestamp();
                 
                 await user.send({ embeds: [rejectEmbed] });
@@ -698,62 +558,7 @@ client.on('messageCreate', async (message) => {
             console.log('Could not DM user');
         }
         
-        return message.reply(`✅ Transaction ${txId} rejected. User notified.`);
-    }
-    
-    if (command === 'paid' && isAdmin) {
-        const txId = args[0];
-        
-        if (!txId) {
-            return message.reply('❌ Usage: `!paid TX-ID`');
-        }
-        
-        const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
-        const tx = stmt.get(txId);
-        
-        if (!tx) {
-            return message.reply('❌ Transaction not found!');
-        }
-        
-        if (tx.status !== 'approved') {
-            return message.reply(`❌ This transaction is ${tx.status}. It needs to be approved first.`);
-        }
-        
-        const updateStmt = db.prepare('UPDATE transactions SET status = ?, paidAt = ? WHERE txId = ?');
-        updateStmt.run('paid', Date.now(), txId);
-        
-        const userData = getUser(tx.userId);
-        if (userData) {
-            const totalSold = (userData.totalSold || 0) + 1;
-            const totalEarned = (userData.totalEarned || 0) + tx.value;
-            setUser(tx.userId, { totalSold, totalEarned });
-        }
-        
-        try {
-            const user = await client.users.fetch(tx.userId);
-            if (user) {
-                const paidEmbed = new EmbedBuilder()
-                    .setColor(0x00FF00)
-                    .setTitle('💰 Payment Sent!')
-                    .addFields(
-                        { name: '🆔 Transaction', value: txId, inline: true },
-                        { name: '💳 Payment Method', value: tx.paymentMethod, inline: true }
-                    )
-                    .setDescription(`Your payment has been sent to:\n${tx.paymentDetail}\n\nThank you for selling with CardVault!`)
-                    .setTimestamp();
-                
-                await user.send({ embeds: [paidEmbed] });
-            }
-        } catch (error) {
-            console.log('Could not DM user');
-        }
-        
-        return message.reply(`✅ Payment for ${txId} marked as sent. User notified.`);
-    }
-    
-    // Help for non-admins trying admin commands
-    if ((command === 'approve' || command === 'reject' || command === 'paid' || command === 'pending' || command === 'transaction') && !isAdmin) {
-        return message.reply('❌ You do not have permission to use admin commands.');
+        return message.reply(`✅ Transaction ${txId} rejected.`);
     }
 });
 
