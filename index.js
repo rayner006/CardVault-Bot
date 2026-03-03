@@ -165,7 +165,6 @@ async function handleDM(message) {
     console.log('='.repeat(50));
     console.log(`User: ${message.author.tag} (${message.author.id})`);
     console.log(`Message content: "${message.content}"`);
-    console.log(`Message type: ${message.channel.type}`);
     
     const userId = message.author.id;
     
@@ -434,12 +433,12 @@ break;
 // Main message handler
 client.on('messageCreate', async (message) => {
     // Log EVERY message the bot sees (for debugging)
-    console.log(`📨 Message from ${message.author.tag} in ${message.channel.type === 1 ? 'DM' : 'server'}: ${message.content}`);
+    console.log(`📨 Message from ${message.author.tag} in ${message.channel.isDMBased() ? 'DM' : 'server'}: ${message.content}`);
     
     if (message.author.bot) return;
     
-    // Handle DM messages (selling process) FIRST
-    if (message.channel.type === 1) { // 1 = DM channel
+    // Handle DM messages (selling process) FIRST - FIXED CHANNEL CHECK
+    if (message.channel.isDMBased()) { // This works in all versions
         console.log('🎯 DM detected, calling handleDM function');
         await handleDM(message);
         return; // Important: return after handling DM
