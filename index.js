@@ -139,273 +139,164 @@ client.once('ready', () => {
     });
 });
 
-// Handle DM conversations - ULTRA DEBUG VERSION
+// ============================================
+// SIMPLIFIED HANDLE DM FUNCTION
+// ============================================
 async function handleDM(message) {
     console.log('\n' + '🚨'.repeat(50));
     console.log(`🚨 handleDM STARTED at ${new Date().toLocaleTimeString()}`);
     console.log('🚨'.repeat(50));
     console.log(`User: ${message.author.tag} (${message.author.id})`);
     console.log(`Message: "${message.content}"`);
-    console.log(`Message length: ${message.content.length}`);
-    console.log(`Message lowercase: "${message.content.toLowerCase()}"`);
-    console.log(`Is "sell"? ${message.content.toLowerCase().trim() === 'sell'}`);
-    console.log(`Sessions has user? ${sessions.has(message.author.id)}`);
     console.log('🚨'.repeat(50) + '\n');
     
     const userId = message.author.id;
+    const content = message.content.toLowerCase().trim();
     
     try {
-        // Check if user is in a selling session
-        if (!sessions.has(userId)) {
-            console.log('📌 No active session found for user');
+        // STEP 1: Check if they said "sell"
+        if (content === 'sell') {
+            console.log('✅ User typed "sell" - checking registration');
             
-            // Start new session if they type 'sell' - FIXED COMPARISON
-            const content = message.content.toLowerCase().trim();
-            console.log(`📝 Checking if "${content}" equals "sell": ${content === 'sell'}`);
+            // Check if registered
+            const userData = getUser(userId);
+            console.log('📊 User data:', userData);
             
-            if (content === 'sell') {
-                console.log('✅ User typed "sell" - starting new session');
-                
-                // Check if registered
-                console.log('🔍 Checking registration for user:', userId);
-                const userData = getUser(userId);
-                console.log('📊 User data from database:', userData);
-                
-                if (!userData) {
-                    console.log('❌ User has NO data in database at all');
-                    return message.reply('❌ You need to register first! Go to the server and type `!register`');
-                }
-                
-                if (!userData.registered) {
-                    console.log('❌ User found but not registered (registered =', userData.registered, ')');
-                    return message.reply('❌ You need to register first! Go to the server and type `!register`');
-                }
-                
-                console.log('✅ User is registered! Creating session...');
-                sessions.set(userId, { step: 1, data: {} });
-                
-                // Ask for payment method first
-                const paymentEmbed = new EmbedBuilder()
-                    .setColor(0xFFA500)
-                    .setTitle('💳 Choose Payment Method')
-                    .setDescription('How do you want to get paid?')
-                    .addFields(
-                        { name: '1️⃣', value: 'PayPal (International)', inline: true },
-                        { name: '2️⃣', value: 'Bitcoin (Crypto)', inline: true },
-                        { name: '3️⃣', value: 'Bank Transfer (Nigeria)', inline: true }
-                    )
-                    .setFooter({ text: 'Reply with 1, 2, or 3' });
-                
-                console.log('📤 Sending payment method embed to user');
-                return message.reply({ embeds: [paymentEmbed] });
-            } else {
-                console.log('📝 User did not type "sell", sending welcome message');
-                return message.reply('Welcome to CardVault! To sell a gift card, type **sell**');
+            if (!userData || !userData.registered) {
+                console.log('❌ User not registered');
+                return message.reply('❌ You need to register first! Go to the server and type `!register`');
             }
+            
+            console.log('✅ User is registered! Sending payment options...');
+            
+            // SIMPLE REPLY - Just ask for payment method
+            const paymentEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('💳 Choose Payment Method')
+                .setDescription('How do you want to get paid?')
+                .addFields(
+                    { name: '1️⃣', value: 'PayPal', inline: true },
+                    { name: '2️⃣', value: 'Bitcoin', inline: true },
+                    { name: '3️⃣', value: 'Bank Transfer (Nigeria)', inline: true }
+                )
+                .setFooter({ text: 'Reply with 1, 2, or 3' });
+            
+            // Save session
+            sessions.set(userId, { step: 1, data: {} });
+            
+            return message.reply({ embeds: [paymentEmbed] });
         }
         
-        // Continue existing session
-        console.log('🔄 User has active session, step:', sessions.get(userId).step);
-        const session = sessions.get(userId);
-        
-        switch (session.step) {
-            case 1: // Get payment method
-                console.log('Step 1: Getting payment method, user replied:', message.content);
-                const method = message.content.trim();
-                if (!['1', '2', '3'].includes(method)) {
-                    console.log('❌ Invalid payment method choice');
-                    return message.reply('❌ Please reply with **1** (PayPal), **2** (Bitcoin), or **3** (Bank Transfer)');
-                }
-                
-                session.data.paymentMethod = method === '1' ? 'paypal' : method === '2' ? 'bitcoin' : 'bank';
-                console.log('✅ Payment method selected:', session.data.paymentMethod);
-                
-                const userData = getUser(userId);
-                console.log('Checking payment details for user:', userData);
-                
-                if (session.data.paymentMethod === 'paypal') {
-                    if (!userData?.paypal) {
-                        console.log('❌ No PayPal email set');
-                        return message.reply('❌ You haven\'t set your PayPal email! Use `!paypal email@example.com` in the server first.\n\nType **cancel** to end this session.');
+        // STEP 2: Check if they're in a session
+        if (sessions.has(userId)) {
+            const session = sessions.get(userId);
+            console.log(`🔄 User in session step: ${session.step}`);
+            
+            if (session.step === 1) {
+                // They're choosing payment method
+                if (content === '1' || content === '2' || content === '3') {
+                    // Map to payment method
+                    const method = content === '1' ? 'paypal' : content === '2' ? 'bitcoin' : 'bank';
+                    session.data.paymentMethod = method;
+                    
+                    // Check if they have payment details saved
+                    const userData = getUser(userId);
+                    
+                    if (method === 'paypal' && !userData?.paypal) {
+                        sessions.delete(userId);
+                        return message.reply('❌ You need to set your PayPal email first! Use `!paypal email@example.com` in the server.');
                     }
-                    session.data.paymentDetail = userData.paypal;
-                    console.log('✅ PayPal email found:', userData.paypal);
-                }
-                
-                if (session.data.paymentMethod === 'bitcoin') {
-                    if (!userData?.btc) {
-                        console.log('❌ No Bitcoin address set');
-                        return message.reply('❌ You haven\'t set your Bitcoin address! Use `!btc your_address` in the server first.\n\nType **cancel** to end this session.');
+                    
+                    if (method === 'bitcoin' && !userData?.btc) {
+                        sessions.delete(userId);
+                        return message.reply('❌ You need to set your Bitcoin address first! Use `!btc your_address` in the server.');
                     }
-                    session.data.paymentDetail = userData.btc;
-                    console.log('✅ Bitcoin address found:', userData.btc);
-                }
-                
-                if (session.data.paymentMethod === 'bank') {
-                    if (!userData?.bankName) {
-                        console.log('❌ No bank details set');
-                        return message.reply('❌ You haven\'t set your bank details! Use `!bank "Name" 0123456789 BankName` in the server first.\n\nType **cancel** to end this session.');
+                    
+                    if (method === 'bank' && !userData?.bankName) {
+                        sessions.delete(userId);
+                        return message.reply('❌ You need to set your bank details first! Use `!bank "Name" 0123456789 BankName` in the server.');
                     }
-                    session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
-                    console.log('✅ Bank details found:', session.data.paymentDetail);
+                    
+                    // They have payment details, move to next step
+                    session.step = 2;
+                    return message.reply(`**Great! Now tell me the card brand** (e.g., Amazon, Visa, Steam, etc.)`);
+                } else {
+                    return message.reply('❌ Please reply with **1**, **2**, or **3**');
                 }
-                
-                session.step = 2;
-                console.log('Moving to step 2 - asking for brand');
-                const brandList = [
-                    '**Amazon**', '**Visa**', '**Mastercard**', '**Amex**',
-                    '**Steam**', '**Xbox**', '**Razer Gold**', '**Google Play**', 
-                    '**Apple**', '**iTunes**', '**Spotify**', '**Vanilla**',
-                    '**Sephora**', '**Nordstrom**', '**Macy**',
-                    '**Walmart**', '**Target**', '**Nike**', '**Footlocker**',
-                ];
-
-                const row1 = brandList.slice(0, 4).join(' • ');
-                const row2 = brandList.slice(4, 8).join(' • ');
-                const row3 = brandList.slice(8, 12).join(' • ');
-                const row4 = brandList.slice(12, 16).join(' • ');
-                const row5 = brandList.slice(16, 20).join(' • ');
-
-                await message.reply(
-                    `**2️⃣ What brand is the card?**\n\n` +
-                    `${row1}\n` +
-                    `${row2}\n` +
-                    `${row3}\n` +
-                    `${row4}\n` +
-                    `${row5}\n\n` +
-                    `*Type the brand name or **cancel** to stop.*`
-                );
-                break;
-                
-            case 2: // Get brand
-                console.log('Step 2: Getting brand, user replied:', message.content);
-                if (message.content.toLowerCase() === 'cancel') {
-                    console.log('User cancelled session');
-                    sessions.delete(userId);
-                    return message.reply('❌ Selling cancelled.');
-                }
-                
+            }
+            
+            if (session.step === 2) {
+                // Save brand and ask for value
                 session.data.brand = message.content;
                 session.step = 3;
-                console.log('Moving to step 3 - asking for value');
-                await message.reply(`**3️⃣ What is the value?**\n(e.g., 25, 50, 100)\n\nType **cancel** to stop.`);
-                break;
-                
-            case 3: // Get value
-                console.log('Step 3: Getting value, user replied:', message.content);
-                if (message.content.toLowerCase() === 'cancel') {
-                    console.log('User cancelled session');
-                    sessions.delete(userId);
-                    return message.reply('❌ Selling cancelled.');
-                }
-                
+                return message.reply(`**What is the card value?** (e.g., 25, 50, 100)`);
+            }
+            
+            if (session.step === 3) {
+                // Save value and ask for image
                 const value = parseInt(message.content);
                 if (isNaN(value) || value <= 0) {
-                    console.log('❌ Invalid value entered');
-                    return message.reply('❌ Please enter a valid number (e.g., 25, 50, 100)\n\nType **cancel** to stop.');
+                    return message.reply('❌ Please enter a valid number (e.g., 25, 50, 100)');
                 }
                 session.data.value = value;
                 session.step = 4;
-                console.log('Moving to step 4 - asking for image');
-                await message.reply(`**4️⃣ Please upload a CLEAR photo of the gift card**\nMake sure the code is visible!\n\nType **cancel** to stop.`);
-                break;
-                
-            case 4: // Get image
-                console.log('Step 4: Getting image, attachments count:', message.attachments.size);
-                if (message.content.toLowerCase() === 'cancel') {
-                    console.log('User cancelled session');
-                    sessions.delete(userId);
-                    return message.reply('❌ Selling cancelled.');
-                }
-                
+                return message.reply(`**Please upload a CLEAR photo of the card** (Make sure the code is visible!)`);
+            }
+            
+            if (session.step === 4) {
+                // Check for image
                 if (message.attachments.size === 0) {
-                    console.log('❌ No image attached');
-                    return message.reply('❌ Please upload an image of the gift card\n\nType **cancel** to stop.');
+                    return message.reply('❌ Please upload an image of the card');
                 }
                 
+                // Process completed submission
                 const image = message.attachments.first();
-                session.data.image = image.url;
-                console.log('✅ Image received:', image.url);
                 
+                // Generate transaction ID
                 const txId = 'CV-' + Date.now().toString(36).toUpperCase();
-                console.log('Generated transaction ID:', txId);
                 
-                let paymentMethodDisplay = '';
-                switch(session.data.paymentMethod) {
-                    case 'paypal':
-                        paymentMethodDisplay = '💳 PayPal';
-                        break;
-                    case 'bitcoin':
-                        paymentMethodDisplay = '₿ Bitcoin';
-                        break;
-                    case 'bank':
-                        paymentMethodDisplay = '🇳🇬 Bank Transfer';
-                        break;
-                }
-                
-                console.log('💾 Saving transaction to database...');
+                // Save to database
                 saveTransaction(txId, {
                     userId: userId,
                     username: message.author.username,
                     paymentMethod: session.data.paymentMethod,
-                    paymentDetail: session.data.paymentDetail,
+                    paymentDetail: 'Saved in user profile',
                     brand: session.data.brand,
                     value: session.data.value,
-                    image: session.data.image,
+                    image: image.url,
                     status: 'pending',
                     submittedAt: Date.now()
                 });
-                console.log('✅ Transaction saved');
                 
-                console.log('Looking for admin channel...');
-                const adminChannel = client.channels.cache.find(c => c.name === 'admin');
-                if (adminChannel) {
-                    console.log('✅ Admin channel found, sending notification');
-                    const adminEmbed = new EmbedBuilder()
-                        .setColor(0xFFA500)
-                        .setTitle('🆕 New Gift Card Submission')
-                        .addFields(
-                            { name: '🆔 Transaction', value: txId, inline: true },
-                            { name: '👤 User', value: message.author.username, inline: true },
-                            { name: '💳 Payment', value: paymentMethodDisplay, inline: true },
-                            { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
-                            { name: '📍 Payment Details', value: session.data.paymentDetail, inline: false }
-                        )
-                        .setImage(image.url)
-                        .setFooter({ text: `User ID: ${userId}` })
-                        .setTimestamp();
-                    
-                    await adminChannel.send({ embeds: [adminEmbed] });
-                    await adminChannel.send(`@here New card ready for review! Use \`!approve ${txId} 40\` or \`!reject ${txId} reason\``);
-                } else {
-                    console.log('❌ Admin channel not found! Make sure you have a channel named #admin');
-                }
-                
+                // Clear session
                 sessions.delete(userId);
-                console.log('Session cleared');
                 
-                console.log('Sending confirmation to user');
+                // Send confirmation
                 const confirmEmbed = new EmbedBuilder()
                     .setColor(0x00FF00)
-                    .setTitle('✅ Gift Card Submitted!')
+                    .setTitle('✅ Card Submitted!')
                     .addFields(
-                        { name: '🆔 Transaction ID', value: txId },
-                        { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
-                        { name: '💳 Payment Method', value: paymentMethodDisplay, inline: true },
-                        { name: '📍 Status', value: '⏳ Pending Review' }
+                        { name: 'Transaction ID', value: txId },
+                        { name: 'Card', value: `${session.data.brand} - $${session.data.value}` },
+                        { name: 'Status', value: '⏳ Pending Review' }
                     )
-                    .setDescription('An admin will review your card shortly. You will be notified when approved.')
-                    .setTimestamp();
+                    .setDescription('An admin will review your card shortly.');
                 
-                await message.reply({ embeds: [confirmEmbed] });
-                console.log('✅ Transaction flow complete!');
-                break;
+                return message.reply({ embeds: [confirmEmbed] });
+            }
         }
+        
+        // Default response if not "sell" and no session
+        return message.reply('Welcome to CardVault! To sell a gift card, type **sell**');
+        
     } catch (error) {
         console.error('❌ ERROR in handleDM:', error);
-        return message.reply('❌ An error occurred. Please try again later.');
+        return message.reply('❌ An error occurred. Please try again.');
     }
 }
+// ============================================
+// END OF HANDLE DM FUNCTION
+// ============================================
 
 // ULTRA DEBUG MESSAGE HANDLER
 client.on('messageCreate', async (message) => {
