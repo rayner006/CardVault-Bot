@@ -1,8 +1,8 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const Database = require('better-sqlite3');
-const express = require('express'); // ADDED for Render
+const express = require('express');
 
-// ADDED - Web server for Render (REQUIRED)
+// Web server for Render
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -13,13 +13,12 @@ app.get('/', (req, res) => {
 app.listen(port, () => {
     console.log(`🌐 Web server listening on port ${port}`);
 });
-// END of Render web server
 
-// IMPORTANT: Database will reset on every Render restart (temporary)
+// Database
 const db = new Database('cardvault.db');
-console.log('⚠️  Warning: Database resets on every restart! Use external DB for persistence.');
+console.log('⚠️ Warning: Database resets on every restart! Use external DB for persistence.');
 
-// Create tables if they don't exist
+// Create tables
 db.exec(`
     CREATE TABLE IF NOT EXISTS users (
         userId TEXT PRIMARY KEY,
@@ -50,12 +49,13 @@ db.exec(`
     );
 `);
 
+// Client with ALL required intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,      // CRITICAL for reading message content
+        GatewayIntentBits.DirectMessages,      // CRITICAL for DMs
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.DirectMessageTyping,
@@ -64,10 +64,10 @@ const client = new Client({
 });
 
 const TOKEN = process.env.DISCORD_TOKEN;
-const PREFIX = process.env.PREFIX || '!'; // Default to '!' if not set
+const PREFIX = process.env.PREFIX || '!';
 const ADMIN_ID = process.env.ADMIN_ID;
 
-// Helper functions for database
+// Database helper functions
 function getUser(userId) {
     const stmt = db.prepare('SELECT * FROM users WHERE userId = ?');
     return stmt.get(userId);
@@ -76,24 +76,17 @@ function getUser(userId) {
 function setUser(userId, data) {
     const user = getUser(userId);
     if (user) {
-        // Update existing user
         const fields = Object.keys(data).map(key => `${key} = ?`).join(', ');
         const values = Object.values(data);
         const stmt = db.prepare(`UPDATE users SET ${fields} WHERE userId = ?`);
         stmt.run(...values, userId);
     } else {
-        // Insert new user
         const keys = ['userId', ...Object.keys(data)];
         const placeholders = keys.map(() => '?').join(', ');
         const values = [userId, ...Object.values(data)];
         const stmt = db.prepare(`INSERT INTO users (${keys.join(', ')}) VALUES (${placeholders})`);
         stmt.run(...values);
     }
-}
-
-function getUserValue(userId, key) {
-    const user = getUser(userId);
-    return user ? user[key] : null;
 }
 
 function saveTransaction(txId, data) {
@@ -104,24 +97,19 @@ function saveTransaction(txId, data) {
     stmt.run(txId, ...values);
 }
 
-function updateTransactionStatus(txId, status) {
-    const stmt = db.prepare('UPDATE transactions SET status = ? WHERE txId = ?');
-    stmt.run(status, txId);
-}
-
-// Store user sessions for multi-step forms
+// Store user sessions
 const sessions = new Map();
 
 client.once('ready', () => {
     console.log(`✅ CardVault is online! Logged in as ${client.user.tag}`);
     console.log(`📊 Serving ${client.guilds.cache.size} servers`);
-    console.log(`💾 Database connected: cardvault.db (Temporary - Resets on restart)`);
+    console.log(`💾 Database connected: cardvault.db`);
     console.log(`🌐 Web server running on port ${port}`);
+    console.log(`🔧 PREFIX: "${PREFIX}"`);
+    console.log(`👑 ADMIN ID: ${ADMIN_ID}`);
     client.user.setActivity('💰 !sell | DM to sell', { type: 'WATCHING' });
     
-    // ============================================
-    // WELCOME MESSAGE FOR NEW MEMBERS (ADDED)
-    // ============================================
+    // Welcome message for new members
     client.on('guildMemberAdd', async (member) => {
         try {
             const welcomeEmbed = new EmbedBuilder()
@@ -132,18 +120,12 @@ client.once('ready', () => {
                     { name: 'Step 1: 📝 Register', value: 'Type `!register` in the server to create your seller account', inline: false },
                     { name: 'Step 2: 💳 Set Payment Method', value: 'Use one of these commands:\n`!paypal email@example.com`\n`!btc yourBitcoinAddress`\n`!bank "Your Name" 0123456789 BankName`', inline: false },
                     { name: 'Step 3: 💬 Start Selling', value: 'DM the bot and type **sell** to begin your card submission', inline: false },
-                    
                     { name: '———————————————————', value: '**📋 RULES**', inline: false },
-                    
                     { name: '✅ DO:', value: '• Submit clear photos of cards\n• Ensure codes are visible\n• Set correct payment details\n• Be patient with reviews', inline: true },
                     { name: '❌ DON\'T:', value: '• Submit expired cards\n• Send fake or used cards\n• Spam or harass staff\n• Share others\' info', inline: true },
-                    
                     { name: '⚠️ WARNING', value: 'Violating rules = permanent ban! No exceptions.', inline: false },
-                    
                     { name: '💳 PAYMENT METHODS', value: 'We pay via:\n• PayPal (International)\n• Bitcoin (Worldwide)\n• Bank Transfer (Nigeria only)', inline: false },
-                    
                     { name: '⏱️ PROCESSING TIME', value: '• Review: 24 hours max\n• Payment: Instant after approval\n• Support: DM <@1478007761697509531>', inline: false },
-                    
                     { name: '📌 TIPS', value: '• Save your payment details to sell faster\n• Clear photos = faster approval\n• Check DMs regularly for updates', inline: false }
                 )
                 .setFooter({ text: 'CardVault • Safe & Fast Gift Card Selling' })
@@ -151,14 +133,13 @@ client.once('ready', () => {
 
             await member.send({ embeds: [welcomeEmbed] });
             console.log(`✅ Welcome message sent to ${member.user.tag}`);
-            
         } catch (error) {
             console.log(`❌ Could not send welcome DM to ${member.user.tag} - DMs might be closed`);
         }
     });
 });
 
-// Handle DM conversations (selling process)
+// Handle DM conversations
 async function handleDM(message) {
     console.log('='.repeat(50));
     console.log('🚨 handleDM FUNCTION WAS CALLED!');
@@ -215,7 +196,7 @@ async function handleDM(message) {
             }
         }
         
-        // Continue existing session
+        // Continue existing session (rest of your handleDM code remains the same)
         console.log('🔄 User has active session, step:', sessions.get(userId).step);
         const session = sessions.get(userId);
         
@@ -231,7 +212,6 @@ async function handleDM(message) {
                 session.data.paymentMethod = method === '1' ? 'paypal' : method === '2' ? 'bitcoin' : 'bank';
                 console.log('✅ Payment method selected:', session.data.paymentMethod);
                 
-                // Check if they have payment details saved
                 const userData = getUser(userId);
                 console.log('Checking payment details for user:', userData);
                 
@@ -264,34 +244,31 @@ async function handleDM(message) {
                 
                 session.step = 2;
                 console.log('Moving to step 2 - asking for brand');
-            const brandList = [
-    '**Amazon**', '**Visa**', '**Mastercard**', '**Amex**',
-    '**Steam**', '**Xbox**', '**Razer Gold**', '**Google Play**', 
-    '**Apple**', '**iTunes**', '**Spotify**', '**Vanilla**',
-     '**Sephora**', '**Nordstrom**', '**Macy**',
-    '**Walmart**', '**Target**', '**Nike**', '**Footlocker**',
-    
-];
+                const brandList = [
+                    '**Amazon**', '**Visa**', '**Mastercard**', '**Amex**',
+                    '**Steam**', '**Xbox**', '**Razer Gold**', '**Google Play**', 
+                    '**Apple**', '**iTunes**', '**Spotify**', '**Vanilla**',
+                    '**Sephora**', '**Nordstrom**', '**Macy**',
+                    '**Walmart**', '**Target**', '**Nike**', '**Footlocker**',
+                ];
 
-// Split into rows of 4
-const row1 = brandList.slice(0, 4).join(' • ');
-const row2 = brandList.slice(4, 8).join(' • ');
-const row3 = brandList.slice(8, 12).join(' • ');
-const row4 = brandList.slice(12, 16).join(' • ');
-const row5 = brandList.slice(16, 20).join(' • ');
-const row6 = brandList.slice(20, 24).join(' • ');
+                const row1 = brandList.slice(0, 4).join(' • ');
+                const row2 = brandList.slice(4, 8).join(' • ');
+                const row3 = brandList.slice(8, 12).join(' • ');
+                const row4 = brandList.slice(12, 16).join(' • ');
+                const row5 = brandList.slice(16, 20).join(' • ');
 
-await message.reply(
-    `**2️⃣ What brand is the card?**\n\n` +
-    `${row1}\n` +
-    `${row2}\n` +
-    `${row3}\n` +
-    `${row4}\n` +
-    `${row5}\n` +
-    `${row6}\n\n` +
-    `*Type the brand name or **cancel** to stop.*`
-);
-break;
+                await message.reply(
+                    `**2️⃣ What brand is the card?**\n\n` +
+                    `${row1}\n` +
+                    `${row2}\n` +
+                    `${row3}\n` +
+                    `${row4}\n` +
+                    `${row5}\n\n` +
+                    `*Type the brand name or **cancel** to stop.*`
+                );
+                break;
+                
             case 2: // Get brand
                 console.log('Step 2: Getting brand, user replied:', message.content);
                 if (message.content.toLowerCase() === 'cancel') {
@@ -342,14 +319,10 @@ break;
                 session.data.image = image.url;
                 console.log('✅ Image received:', image.url);
                 
-                // Generate transaction ID
                 const txId = 'CV-' + Date.now().toString(36).toUpperCase();
                 console.log('Generated transaction ID:', txId);
                 
-                // Get payment method display name
                 let paymentMethodDisplay = '';
-                let paymentDetail = session.data.paymentDetail;
-                
                 switch(session.data.paymentMethod) {
                     case 'paypal':
                         paymentMethodDisplay = '💳 PayPal';
@@ -362,7 +335,6 @@ break;
                         break;
                 }
                 
-                // Save to database
                 console.log('💾 Saving transaction to database...');
                 saveTransaction(txId, {
                     userId: userId,
@@ -377,7 +349,6 @@ break;
                 });
                 console.log('✅ Transaction saved');
                 
-                // Notify admin
                 console.log('Looking for admin channel...');
                 const adminChannel = client.channels.cache.find(c => c.name === 'admin');
                 if (adminChannel) {
@@ -390,7 +361,7 @@ break;
                             { name: '👤 User', value: message.author.username, inline: true },
                             { name: '💳 Payment', value: paymentMethodDisplay, inline: true },
                             { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
-                            { name: '📍 Payment Details', value: paymentDetail, inline: false }
+                            { name: '📍 Payment Details', value: session.data.paymentDetail, inline: false }
                         )
                         .setImage(image.url)
                         .setFooter({ text: `User ID: ${userId}` })
@@ -402,11 +373,9 @@ break;
                     console.log('❌ Admin channel not found! Make sure you have a channel named #admin');
                 }
                 
-                // Clear session
                 sessions.delete(userId);
                 console.log('Session cleared');
                 
-                // Send confirmation to user
                 console.log('Sending confirmation to user');
                 const confirmEmbed = new EmbedBuilder()
                     .setColor(0x00FF00)
@@ -430,56 +399,94 @@ break;
     }
 }
 
-// Main message handler
+// MAIN MESSAGE HANDLER - FIXED VERSION
 client.on('messageCreate', async (message) => {
-    // Log EVERY message the bot sees (for debugging)
-    console.log(`📨 Message from ${message.author.tag} in ${message.channel.isDMBased() ? 'DM' : 'server'}: ${message.content}`);
+    // SUPER DETAILED DEBUG LOGGING
+    console.log('\n' + '🔷'.repeat(30));
+    console.log(`🔍 NEW MESSAGE RECEIVED AT ${new Date().toLocaleTimeString()}`);
+    console.log(`   Author: ${message.author.tag} (${message.author.id})`);
+    console.log(`   Content: "${message.content}"`);
+    console.log(`   Channel Type: ${message.channel.type}`);
+    console.log(`   Is DM? ${message.guild === null ? 'YES' : 'NO'}`);
+    console.log(`   Guild: ${message.guild ? message.guild.name : 'None (DM)'}`);
+    console.log(`   Is Bot? ${message.author.bot}`);
+    console.log('🔷'.repeat(30) + '\n');
     
+    // Ignore bot messages
     if (message.author.bot) return;
     
-    // Handle DM messages (selling process) FIRST - FIXED CHANNEL CHECK
-    if (message.channel.isDMBased()) { // This works in all versions
-        console.log('🎯 DM detected, calling handleDM function');
+    // ============================================
+    // FIXED DM DETECTION - This is the key fix!
+    // ============================================
+    if (message.guild === null) {
+        console.log('🎯✅ DM DETECTED! Calling handleDM function...');
         await handleDM(message);
-        return; // Important: return after handling DM
+        return; // Important: stop processing here
     }
     
-    console.log('Not a DM, checking for prefix...');
-    // Handle server commands
-    if (!message.content.startsWith(PREFIX)) return;
+    console.log('📢 Server message detected, checking for commands...');
     
-    console.log('Command detected:', message.content);
+    // Handle server commands
+    if (!message.content.startsWith(PREFIX)) {
+        console.log('❌ Not a command (no prefix)');
+        return;
+    }
+    
+    console.log('✅ Command detected, processing...');
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
+    console.log(`   Command: ${command}`);
+    console.log(`   Args: ${args.join(', ')}`);
     
-    // Check if user is admin (for admin commands)
     const isAdmin = message.author.id === ADMIN_ID;
-    
     
     // ============================================
     // TEST COMMANDS
     // ============================================
     
     if (command === 'ping') {
+        console.log('🏓 Ping command received');
         return message.reply('Pong! 🏓 Bot is working!');
     }
     
     if (command === 'dmtest') {
+        console.log('📨 DM test command received');
         try {
             await message.author.send('✅ DM working! CardVault can message you.');
             message.reply('Check your DMs!');
+            console.log('✅ Test DM sent successfully');
         } catch (error) {
+            console.log('❌ Could not send DM:', error.message);
             message.reply('❌ I could not DM you. Please enable DMs from server members.');
         }
         return;
+    }
+    
+    if (command === 'debug') {
+        console.log('🔧 Debug command received');
+        const debugEmbed = new EmbedBuilder()
+            .setColor(0x0099FF)
+            .setTitle('🔧 Bot Debug Info')
+            .addFields(
+                { name: 'Bot Tag', value: client.user.tag, inline: true },
+                { name: 'Bot ID', value: client.user.id, inline: true },
+                { name: 'Prefix', value: PREFIX, inline: true },
+                { name: 'Admin ID', value: ADMIN_ID || 'Not set', inline: true },
+                { name: 'Is Admin?', value: isAdmin ? 'YES' : 'NO', inline: true },
+                { name: 'Message Content Intent', value: 'ENABLED (if you see this)', inline: true },
+                { name: 'Sessions Active', value: sessions.size.toString(), inline: true },
+                { name: 'Database', value: 'Connected', inline: true }
+            )
+            .setTimestamp();
+        return message.reply({ embeds: [debugEmbed] });
     }
     
     // ============================================
     // USER COMMANDS
     // ============================================
     
-    // Register command
     if (command === 'register') {
+        console.log('📝 Register command for user:', message.author.id);
         setUser(message.author.id, {
             registered: 1,
             registeredAt: Date.now()
@@ -500,7 +507,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // Set PayPal email
     if (command === 'paypal') {
         const email = args[0];
         if (!email || !email.includes('@')) {
@@ -510,7 +516,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ PayPal email set to: ${email}`);
     }
     
-    // Set Bitcoin address
     if (command === 'btc') {
         const address = args[0];
         if (!address || address.length < 10) {
@@ -520,9 +525,7 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Bitcoin address set to: ${address}`);
     }
     
-    // Set Nigerian bank details
     if (command === 'bank') {
-        // Format: !bank "Account Name" AccountNumber BankName
         const accountName = args[0]?.replace(/"/g, '');
         const accountNumber = args[1];
         const bankName = args.slice(2).join(' ');
@@ -540,7 +543,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Bank details saved:\n**${accountName}**\n${accountNumber}\n${bankName}`);
     }
     
-    // Check profile
     if (command === 'profile') {
         const user = message.mentions.users.first() || message.author;
         const userData = getUser(user.id);
@@ -571,11 +573,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // ============================================
-    // MEMBER LIST COMMANDS
-    // ============================================
-    
-    // Member count command
     if (command === 'members') {
         const members = message.guild.members.cache;
         const totalMembers = members.size;
@@ -596,7 +593,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // Online members status command
     if (command === 'online') {
         const members = message.guild.members.cache;
         const online = members.filter(m => m.presence?.status === 'online').size;
@@ -618,7 +614,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // List all human members (first 20)
     if (command === 'users') {
         const members = message.guild.members.cache
             .filter(m => !m.user.bot && m.user.id !== client.user.id)
@@ -635,7 +630,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // List all bots
     if (command === 'bots') {
         const bots = message.guild.members.cache
             .filter(m => m.user.bot)
@@ -653,10 +647,9 @@ client.on('messageCreate', async (message) => {
     }
     
     // ============================================
-    // ADMIN COMMANDS (Only for you)
+    // ADMIN COMMANDS
     // ============================================
     
-    // !pending - List all pending transactions
     if (command === 'pending' && isAdmin) {
         try {
             const stmt = db.prepare("SELECT * FROM transactions WHERE status = 'pending' ORDER BY submittedAt DESC");
@@ -690,7 +683,6 @@ client.on('messageCreate', async (message) => {
         }
     }
     
-    // !transaction [txId] - View transaction details
     if (command === 'transaction' && isAdmin) {
         const txId = args[0];
         if (!txId) {
@@ -704,7 +696,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Transaction not found!');
         }
         
-        // Get payment method display
         let paymentMethodDisplay = '';
         switch(tx.paymentMethod) {
             case 'paypal': paymentMethodDisplay = '💳 PayPal'; break;
@@ -731,7 +722,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // !approve [txId] [amount] - Approve card and set offer
     if (command === 'approve' && isAdmin) {
         const txId = args[0];
         const amount = parseInt(args[1]);
@@ -740,7 +730,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Usage: `!approve TX-ID AMOUNT`\nExample: `!approve CV-ABC123 40`');
         }
         
-        // Get transaction
         const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
         const tx = stmt.get(txId);
         
@@ -752,11 +741,9 @@ client.on('messageCreate', async (message) => {
             return message.reply(`❌ This transaction is already ${tx.status}`);
         }
         
-        // Update transaction status
         const updateStmt = db.prepare('UPDATE transactions SET status = ?, approvedAt = ? WHERE txId = ?');
         updateStmt.run('approved', Date.now(), txId);
         
-        // Notify user via DM
         try {
             const user = await client.users.fetch(tx.userId);
             if (user) {
@@ -777,7 +764,6 @@ client.on('messageCreate', async (message) => {
             console.log('Could not DM user');
         }
         
-        // Confirm to admin
         const confirmEmbed = new EmbedBuilder()
             .setColor(0x00FF00)
             .setTitle('✅ Card Approved')
@@ -792,7 +778,6 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [confirmEmbed] });
     }
     
-    // !reject [txId] [reason] - Reject card
     if (command === 'reject' && isAdmin) {
         const txId = args[0];
         const reason = args.slice(1).join(' ') || 'No reason provided';
@@ -801,7 +786,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Usage: `!reject TX-ID REASON`\nExample: `!reject CV-ABC123 Invalid card`');
         }
         
-        // Get transaction
         const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
         const tx = stmt.get(txId);
         
@@ -813,11 +797,9 @@ client.on('messageCreate', async (message) => {
             return message.reply(`❌ This transaction is already ${tx.status}`);
         }
         
-        // Update transaction status
         const updateStmt = db.prepare('UPDATE transactions SET status = ? WHERE txId = ?');
         updateStmt.run('rejected', txId);
         
-        // Notify user via DM
         try {
             const user = await client.users.fetch(tx.userId);
             if (user) {
@@ -841,7 +823,6 @@ client.on('messageCreate', async (message) => {
         return message.reply(`✅ Transaction ${txId} rejected. User notified.`);
     }
     
-    // !paid [txId] - Mark payment as sent
     if (command === 'paid' && isAdmin) {
         const txId = args[0];
         
@@ -849,7 +830,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Usage: `!paid TX-ID`');
         }
         
-        // Get transaction
         const stmt = db.prepare('SELECT * FROM transactions WHERE txId = ?');
         const tx = stmt.get(txId);
         
@@ -861,11 +841,9 @@ client.on('messageCreate', async (message) => {
             return message.reply(`❌ This transaction is ${tx.status}. It needs to be approved first.`);
         }
         
-        // Update transaction status
         const updateStmt = db.prepare('UPDATE transactions SET status = ?, paidAt = ? WHERE txId = ?');
         updateStmt.run('paid', Date.now(), txId);
         
-        // Update user stats
         const userData = getUser(tx.userId);
         if (userData) {
             const totalSold = (userData.totalSold || 0) + 1;
@@ -873,7 +851,6 @@ client.on('messageCreate', async (message) => {
             setUser(tx.userId, { totalSold, totalEarned });
         }
         
-        // Notify user via DM
         try {
             const user = await client.users.fetch(tx.userId);
             if (user) {
