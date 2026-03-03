@@ -139,22 +139,36 @@ client.once('ready', () => {
     });
 });
 
-// Handle DM conversations - FIXED with message.author.send()
+// Handle DM conversations - WITH DEBUG LOGS
 async function handleDM(message) {
+    console.log('🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴');
+    console.log(`🔴 handleDM CALLED at ${new Date().toLocaleTimeString()}`);
+    console.log(`🔴 User: ${message.author.tag} (${message.author.id})`);
+    console.log(`🔴 Content: "${message.content}"`);
+    console.log(`🔴 Content lowercase: "${message.content.toLowerCase().trim()}"`);
+    console.log(`🔴 Is "sell"? ${message.content.toLowerCase().trim() === 'sell'}`);
+    console.log('🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴🔴');
+    
     const userId = message.author.id;
     const content = message.content.toLowerCase().trim();
     
     try {
         // Check if they said "sell"
         if (content === 'sell') {
+            console.log('✅ "sell" detected! Checking registration...');
+            
             // Check if registered
             const userData = getUser(userId);
+            console.log('📊 User data:', userData);
             
             if (!userData || !userData.registered) {
+                console.log('❌ User not registered');
                 return message.author.send('❌ You need to register first! Go to the server and type `!register`');
             }
             
-            // Ask for payment method - USING author.send() INSTEAD OF reply()
+            console.log('✅ User is registered! Sending payment options...');
+            
+            // Ask for payment method
             const paymentEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('💳 Choose Payment Method')
@@ -168,74 +182,93 @@ async function handleDM(message) {
             
             // Save session
             sessions.set(userId, { step: 1, data: {} });
+            console.log('✅ Session created, step 1');
             
             // Send the message
             await message.author.send({ embeds: [paymentEmbed] });
+            console.log('✅ Payment options sent!');
             return;
         }
         
         // Check if they're in a session
         if (sessions.has(userId)) {
+            console.log(`🔄 User in session, step: ${sessions.get(userId).step}`);
             const session = sessions.get(userId);
             
             if (session.step === 1) {
+                console.log('Step 1: Processing payment method choice');
                 // Choosing payment method
                 if (content === '1' || content === '2' || content === '3') {
                     const method = content === '1' ? 'paypal' : content === '2' ? 'bitcoin' : 'bank';
                     session.data.paymentMethod = method;
+                    console.log(`✅ Payment method selected: ${method}`);
                     
                     // Check if they have payment details saved
                     const userData = getUser(userId);
                     
                     if (method === 'paypal' && !userData?.paypal) {
+                        console.log('❌ No PayPal email set');
                         sessions.delete(userId);
                         return message.author.send('❌ You need to set your PayPal email first! Use `!paypal email@example.com` in the server.');
                     }
                     
                     if (method === 'bitcoin' && !userData?.btc) {
+                        console.log('❌ No Bitcoin address set');
                         sessions.delete(userId);
                         return message.author.send('❌ You need to set your Bitcoin address first! Use `!btc your_address` in the server.');
                     }
                     
                     if (method === 'bank' && !userData?.bankName) {
+                        console.log('❌ No bank details set');
                         sessions.delete(userId);
                         return message.author.send('❌ You need to set your bank details first! Use `!bank "Name" 0123456789 BankName` in the server.');
                     }
                     
                     session.step = 2;
+                    console.log('✅ Moving to step 2');
                     return message.author.send(`**Great! Now tell me the card brand** (e.g., Amazon, Visa, Steam, etc.)`);
                 } else {
+                    console.log('❌ Invalid payment method choice');
                     return message.author.send('❌ Please reply with **1**, **2**, or **3**');
                 }
             }
             
             if (session.step === 2) {
+                console.log('Step 2: Saving brand');
                 // Save brand
                 session.data.brand = message.content;
                 session.step = 3;
+                console.log('✅ Moving to step 3');
                 return message.author.send(`**What is the card value?** (e.g., 25, 50, 100)`);
             }
             
             if (session.step === 3) {
+                console.log('Step 3: Saving value');
                 // Save value
                 const value = parseInt(message.content);
                 if (isNaN(value) || value <= 0) {
+                    console.log('❌ Invalid value');
                     return message.author.send('❌ Please enter a valid number (e.g., 25, 50, 100)');
                 }
                 session.data.value = value;
                 session.step = 4;
+                console.log('✅ Moving to step 4');
                 return message.author.send(`**Please upload a CLEAR photo of the card** (Make sure the code is visible!)`);
             }
             
             if (session.step === 4) {
+                console.log('Step 4: Processing image');
                 // Check for image
                 if (message.attachments.size === 0) {
+                    console.log('❌ No image attached');
                     return message.author.send('❌ Please upload an image of the card');
                 }
                 
+                console.log('✅ Image received, processing submission');
                 // Process submission
                 const image = message.attachments.first();
                 const txId = 'CV-' + Date.now().toString(36).toUpperCase();
+                console.log(`✅ Transaction ID: ${txId}`);
                 
                 // Save to database
                 saveTransaction(txId, {
@@ -249,10 +282,12 @@ async function handleDM(message) {
                     status: 'pending',
                     submittedAt: Date.now()
                 });
+                console.log('✅ Transaction saved to database');
                 
                 // Notify admin channel
                 const adminChannel = client.channels.cache.find(c => c.name === 'admin');
                 if (adminChannel) {
+                    console.log('✅ Notifying admin channel');
                     const adminEmbed = new EmbedBuilder()
                         .setColor(0xFFA500)
                         .setTitle('🆕 New Gift Card Submission')
@@ -267,10 +302,13 @@ async function handleDM(message) {
                         .setTimestamp();
                     
                     await adminChannel.send({ embeds: [adminEmbed] });
+                } else {
+                    console.log('❌ Admin channel not found');
                 }
                 
                 // Clear session
                 sessions.delete(userId);
+                console.log('✅ Session cleared');
                 
                 // Send confirmation
                 const confirmEmbed = new EmbedBuilder()
@@ -283,47 +321,73 @@ async function handleDM(message) {
                     )
                     .setDescription('An admin will review your card shortly.');
                 
-                return message.author.send({ embeds: [confirmEmbed] });
+                await message.author.send({ embeds: [confirmEmbed] });
+                console.log('✅ Confirmation sent to user');
+                return;
             }
         }
         
         // Default response
+        console.log('📝 No session and not "sell", sending welcome message');
         return message.author.send('Welcome to CardVault! To sell a gift card, type **sell**');
         
     } catch (error) {
-        console.error('❌ Error in handleDM:', error);
+        console.error('❌❌❌ ERROR in handleDM:', error);
         return message.author.send('❌ An error occurred. Please try again.');
     }
 }
 
-// Main message handler
+// Main message handler - WITH DEBUG LOGS
 client.on('messageCreate', async (message) => {
+    console.log('🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵');
+    console.log(`🔵 MAIN HANDLER at ${new Date().toLocaleTimeString()}`);
+    console.log(`🔵 Author: ${message.author.tag}`);
+    console.log(`🔵 Content: "${message.content}"`);
+    console.log(`🔵 Is DM? ${message.guild === null}`);
+    console.log(`🔵 Is Bot? ${message.author.bot}`);
+    console.log('🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵🔵');
+    
     // Ignore bot messages
-    if (message.author.bot) return;
+    if (message.author.bot) {
+        console.log('🤖 Ignoring bot message');
+        return;
+    }
     
     // Handle DMs
     if (message.guild === null) {
+        console.log('📨 DM DETECTED - Calling handleDM');
         await handleDM(message);
         return;
     }
     
     // Handle server commands
-    if (!message.content.startsWith(PREFIX)) return;
+    console.log('📢 Server message - checking for commands');
+    if (!message.content.startsWith(PREFIX)) {
+        console.log('❌ No prefix, ignoring');
+        return;
+    }
     
+    console.log('✅ Command detected');
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
+    console.log(`📋 Command: ${command}`);
+    
     const isAdmin = message.author.id === ADMIN_ID;
     
     // Test commands
     if (command === 'ping') {
+        console.log('🏓 Pong command');
         return message.reply('Pong! 🏓 Bot is working!');
     }
     
     if (command === 'dmtest') {
+        console.log('📨 DM test command');
         try {
             await message.author.send('✅ DM working! CardVault can message you.');
             message.reply('Check your DMs!');
+            console.log('✅ Test DM sent');
         } catch (error) {
+            console.log('❌ DM test failed:', error.message);
             message.reply('❌ I could not DM you. Please enable DMs from server members.');
         }
         return;
@@ -331,6 +395,7 @@ client.on('messageCreate', async (message) => {
     
     // User commands
     if (command === 'register') {
+        console.log('📝 Register command');
         setUser(message.author.id, {
             registered: 1,
             registeredAt: Date.now()
