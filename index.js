@@ -139,7 +139,7 @@ client.once('ready', () => {
     });
 });
 
-// Handle DM conversations
+// Handle DM conversations - FIXED with message.author.send()
 async function handleDM(message) {
     const userId = message.author.id;
     const content = message.content.toLowerCase().trim();
@@ -151,10 +151,10 @@ async function handleDM(message) {
             const userData = getUser(userId);
             
             if (!userData || !userData.registered) {
-                return message.reply('❌ You need to register first! Go to the server and type `!register`');
+                return message.author.send('❌ You need to register first! Go to the server and type `!register`');
             }
             
-            // Ask for payment method
+            // Ask for payment method - USING author.send() INSTEAD OF reply()
             const paymentEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
                 .setTitle('💳 Choose Payment Method')
@@ -169,7 +169,9 @@ async function handleDM(message) {
             // Save session
             sessions.set(userId, { step: 1, data: {} });
             
-            return message.reply({ embeds: [paymentEmbed] });
+            // Send the message
+            await message.author.send({ embeds: [paymentEmbed] });
+            return;
         }
         
         // Check if they're in a session
@@ -187,23 +189,23 @@ async function handleDM(message) {
                     
                     if (method === 'paypal' && !userData?.paypal) {
                         sessions.delete(userId);
-                        return message.reply('❌ You need to set your PayPal email first! Use `!paypal email@example.com` in the server.');
+                        return message.author.send('❌ You need to set your PayPal email first! Use `!paypal email@example.com` in the server.');
                     }
                     
                     if (method === 'bitcoin' && !userData?.btc) {
                         sessions.delete(userId);
-                        return message.reply('❌ You need to set your Bitcoin address first! Use `!btc your_address` in the server.');
+                        return message.author.send('❌ You need to set your Bitcoin address first! Use `!btc your_address` in the server.');
                     }
                     
                     if (method === 'bank' && !userData?.bankName) {
                         sessions.delete(userId);
-                        return message.reply('❌ You need to set your bank details first! Use `!bank "Name" 0123456789 BankName` in the server.');
+                        return message.author.send('❌ You need to set your bank details first! Use `!bank "Name" 0123456789 BankName` in the server.');
                     }
                     
                     session.step = 2;
-                    return message.reply(`**Great! Now tell me the card brand** (e.g., Amazon, Visa, Steam, etc.)`);
+                    return message.author.send(`**Great! Now tell me the card brand** (e.g., Amazon, Visa, Steam, etc.)`);
                 } else {
-                    return message.reply('❌ Please reply with **1**, **2**, or **3**');
+                    return message.author.send('❌ Please reply with **1**, **2**, or **3**');
                 }
             }
             
@@ -211,24 +213,24 @@ async function handleDM(message) {
                 // Save brand
                 session.data.brand = message.content;
                 session.step = 3;
-                return message.reply(`**What is the card value?** (e.g., 25, 50, 100)`);
+                return message.author.send(`**What is the card value?** (e.g., 25, 50, 100)`);
             }
             
             if (session.step === 3) {
                 // Save value
                 const value = parseInt(message.content);
                 if (isNaN(value) || value <= 0) {
-                    return message.reply('❌ Please enter a valid number (e.g., 25, 50, 100)');
+                    return message.author.send('❌ Please enter a valid number (e.g., 25, 50, 100)');
                 }
                 session.data.value = value;
                 session.step = 4;
-                return message.reply(`**Please upload a CLEAR photo of the card** (Make sure the code is visible!)`);
+                return message.author.send(`**Please upload a CLEAR photo of the card** (Make sure the code is visible!)`);
             }
             
             if (session.step === 4) {
                 // Check for image
                 if (message.attachments.size === 0) {
-                    return message.reply('❌ Please upload an image of the card');
+                    return message.author.send('❌ Please upload an image of the card');
                 }
                 
                 // Process submission
@@ -281,16 +283,16 @@ async function handleDM(message) {
                     )
                     .setDescription('An admin will review your card shortly.');
                 
-                return message.reply({ embeds: [confirmEmbed] });
+                return message.author.send({ embeds: [confirmEmbed] });
             }
         }
         
         // Default response
-        return message.reply('Welcome to CardVault! To sell a gift card, type **sell**');
+        return message.author.send('Welcome to CardVault! To sell a gift card, type **sell**');
         
     } catch (error) {
         console.error('❌ Error in handleDM:', error);
-        return message.reply('❌ An error occurred. Please try again.');
+        return message.author.send('❌ An error occurred. Please try again.');
     }
 }
 
@@ -312,9 +314,19 @@ client.on('messageCreate', async (message) => {
     const command = args.shift().toLowerCase();
     const isAdmin = message.author.id === ADMIN_ID;
     
-    // Test command
+    // Test commands
     if (command === 'ping') {
         return message.reply('Pong! 🏓 Bot is working!');
+    }
+    
+    if (command === 'dmtest') {
+        try {
+            await message.author.send('✅ DM working! CardVault can message you.');
+            message.reply('Check your DMs!');
+        } catch (error) {
+            message.reply('❌ I could not DM you. Please enable DMs from server members.');
+        }
+        return;
     }
     
     // User commands
