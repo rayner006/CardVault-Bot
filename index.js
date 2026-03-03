@@ -389,7 +389,7 @@ client.once('ready', () => {
     console.log('='.repeat(50) + '\n');
 
     // Set bot status
-    client.user.setActivity(`${CONFIG.PREFIX}sell | DM to sell`, { 
+    client.user.setActivity(`${CONFIG.PREFIX}start | Begin selling`, { 
         type: 'WATCHING' 
     });
 });
@@ -416,8 +416,8 @@ client.on('guildMemberAdd', async (member) => {
                     inline: false 
                 },
                 { 
-                    name: 'Step 3: 💬 Start Selling', 
-                    value: 'DM the bot and type **sell** to begin your card submission', 
+                    name: 'Step 3: 🚀 Start Selling', 
+                    value: `Type \`${CONFIG.PREFIX}start\` or \`${CONFIG.PREFIX}hello\` in the server to open a DM, then send **sell**`, 
                     inline: false 
                 },
                 { name: '———————————————————', value: '**📋 RULES**', inline: false },
@@ -679,12 +679,14 @@ client.on('messageCreate', async (message) => {
         });
     }
 
-    if (command === 'dmtest') {
+    // ===== START/HELLO COMMANDS - Open DM channel =====
+    if (command === 'start' || command === 'hello') {
         try {
-            await message.author.send('✅ DM working! CardVault can message you.');
-            message.reply('✅ Check your DMs!');
+            await message.author.send('👋 **Welcome to CardVault!**\n\nDM me **sell** to start selling your gift cards.\n\nNeed help? Type `!help` in the server.');
+            message.reply('✅ **DM opened!** Check your DMs and type **sell** to begin.');
+            console.log(`[START] Opened DM for ${message.author.tag}`);
         } catch (error) {
-            message.reply('❌ Could not DM you. Please enable DMs from server members.');
+            message.reply('❌ Could not DM you. Please enable DMs from server members and try again.');
         }
         return;
     }
@@ -694,17 +696,31 @@ client.on('messageCreate', async (message) => {
             .setColor(0x0099FF)
             .setTitle('📚 CardVault Bot Commands')
             .addFields(
-                { name: '📝 Registration', value: `\`${CONFIG.PREFIX}register\` - Create seller account`, inline: false },
-                { name: '💳 Payment Methods', value: 
+                { name: '🚀 **GET STARTED**', value: 
+                    `\`${CONFIG.PREFIX}start\` or \`${CONFIG.PREFIX}hello\` - Opens DM so you can sell`, 
+                    inline: false },
+                { name: '📝 **Registration**', value: 
+                    `\`${CONFIG.PREFIX}register\` - Create seller account`, 
+                    inline: false },
+                { name: '💳 **Payment Methods**', value: 
                     `\`${CONFIG.PREFIX}paypal email\` - Set PayPal\n` +
                     `\`${CONFIG.PREFIX}btc address\` - Set Bitcoin\n` +
-                    `\`${CONFIG.PREFIX}bank "Name" 0123456789 Bank\` - Set Bank`, inline: false },
-                { name: '👤 Profile', value: `\`${CONFIG.PREFIX}profile\` - View your profile`, inline: false },
-                { name: '📊 Server', value: 
+                    `\`${CONFIG.PREFIX}bank "Name" 0123456789 Bank\` - Set Bank`, 
+                    inline: false },
+                { name: '👤 **Profile**', value: 
+                    `\`${CONFIG.PREFIX}profile\` - View your profile`, 
+                    inline: false },
+                { name: '📊 **Server Info**', value: 
                     `\`${CONFIG.PREFIX}members\` - Member count\n` +
                     `\`${CONFIG.PREFIX}users\` - List humans\n` +
-                    `\`${CONFIG.PREFIX}bots\` - List bots`, inline: false },
-                { name: '💬 Selling', value: 'DM the bot and type **sell** to start', inline: false }
+                    `\`${CONFIG.PREFIX}bots\` - List bots`, 
+                    inline: false },
+                { name: '💬 **How to Sell**', value: 
+                    `1. Type \`${CONFIG.PREFIX}start\` in server\n` +
+                    `2. Check your DM\n` +
+                    `3. Type **sell** in DM\n` +
+                    `4. Follow the prompts`, 
+                    inline: false }
             )
             .setFooter({ text: 'CardVault Gift Card Buyer' })
             .setTimestamp();
@@ -722,7 +738,7 @@ client.on('messageCreate', async (message) => {
                 '✅ Registration Successful!',
                 'You can now sell gift cards!',
                 [
-                    { name: '📍 Next Step', value: 'DM the bot and type **sell** to start', inline: false },
+                    { name: '📍 Next Step', value: `Type \`${CONFIG.PREFIX}start\` to open DM and begin selling`, inline: false },
                     { name: '💳 Set Payment Method', value: 
                         `\`${CONFIG.PREFIX}paypal email\`\n` +
                         `\`${CONFIG.PREFIX}btc address\`\n` +
