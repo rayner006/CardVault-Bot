@@ -139,40 +139,18 @@ client.once('ready', () => {
     });
 });
 
-// ============================================
-// DEBUGGING SECTION - WILL LOG ALL DMs
-// ============================================
-client.on('messageCreate', (message) => {
-    // Log ALL messages for debugging
-    console.log('\n' + '🔍'.repeat(30));
-    console.log(`🔍 DEBUG: Message received at ${new Date().toLocaleTimeString()}`);
-    console.log(`   Author: ${message.author.tag} (${message.author.id})`);
-    console.log(`   Content: "${message.content}"`);
-    console.log(`   Is DM? ${message.guild === null ? 'YES 🔥' : 'NO'}`);
-    console.log(`   Channel: ${message.guild ? message.guild.name : 'DM'}`);
-    console.log('🔍'.repeat(30) + '\n');
-
-    // If it's a DM and not from a bot, send a test reply
-    if (message.guild === null && !message.author.bot) {
-        console.log('🎯🎯🎯 DM DETECTED BY DEBUGGER! 🎯🎯🎯');
-        
-        // Send a test reply to confirm DM works
-        message.reply(`🔍 **DEBUG BOT HERE!**\n\nI received your message: "${message.content}"\n\nYour main bot will now process this. If you don't get a proper response, the issue is in the main bot code, not Discord.`)
-            .then(() => console.log('✅ DEBUG: Test reply sent successfully!'))
-            .catch(err => console.log('❌ DEBUG: Could not send reply:', err.message));
-    }
-});
-// ============================================
-// END DEBUGGING SECTION
-// ============================================
-
-// Handle DM conversations
+// Handle DM conversations - ULTRA DEBUG VERSION
 async function handleDM(message) {
-    console.log('='.repeat(50));
-    console.log('🚨 MAIN BOT: handleDM FUNCTION WAS CALLED!');
-    console.log('='.repeat(50));
+    console.log('\n' + '🚨'.repeat(50));
+    console.log(`🚨 handleDM STARTED at ${new Date().toLocaleTimeString()}`);
+    console.log('🚨'.repeat(50));
     console.log(`User: ${message.author.tag} (${message.author.id})`);
-    console.log(`Message content: "${message.content}"`);
+    console.log(`Message: "${message.content}"`);
+    console.log(`Message length: ${message.content.length}`);
+    console.log(`Message lowercase: "${message.content.toLowerCase()}"`);
+    console.log(`Is "sell"? ${message.content.toLowerCase().trim() === 'sell'}`);
+    console.log(`Sessions has user? ${sessions.has(message.author.id)}`);
+    console.log('🚨'.repeat(50) + '\n');
     
     const userId = message.author.id;
     
@@ -181,8 +159,11 @@ async function handleDM(message) {
         if (!sessions.has(userId)) {
             console.log('📌 No active session found for user');
             
-            // Start new session if they type 'sell'
-            if (message.content.toLowerCase() === 'sell') {
+            // Start new session if they type 'sell' - FIXED COMPARISON
+            const content = message.content.toLowerCase().trim();
+            console.log(`📝 Checking if "${content}" equals "sell": ${content === 'sell'}`);
+            
+            if (content === 'sell') {
                 console.log('✅ User typed "sell" - starting new session');
                 
                 // Check if registered
@@ -426,37 +407,68 @@ async function handleDM(message) {
     }
 }
 
-// MAIN MESSAGE HANDLER
+// ULTRA DEBUG MESSAGE HANDLER
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
+    // Log EVERY single message in extreme detail
+    console.log('\n' + '🔥'.repeat(60));
+    console.log(`🔥 MAIN HANDLER TRIGGERED at ${new Date().toLocaleTimeString()}`);
+    console.log('🔥'.repeat(60));
+    console.log(`📨 Author: ${message.author.tag} (${message.author.id})`);
+    console.log(`📝 Content: "${message.content}"`);
+    console.log(`🏠 Is DM? ${message.guild === null}`);
+    console.log(`🤖 Is Bot? ${message.author.bot}`);
+    console.log(`📊 Channel Type: ${message.channel.type}`);
+    console.log(`🌍 Guild: ${message.guild ? message.guild.name : 'None (DM)'}`);
+    console.log('🔥'.repeat(60) + '\n');
     
-    // Handle DM messages
+    // Ignore bot messages
+    if (message.author.bot) {
+        console.log('🤖 Ignoring bot message');
+        return;
+    }
+    
+    // HANDLE DMs - FIXED DETECTION
     if (message.guild === null) {
-        console.log('🎯 MAIN BOT: DM detected, calling handleDM');
-        await handleDM(message);
+        console.log('🎯🎯🎯 DM DETECTED - CALLING handleDM');
+        console.log(`🎯 Calling handleDM with message: "${message.content}"`);
+        
+        try {
+            await handleDM(message);
+            console.log('✅ handleDM completed successfully');
+        } catch (error) {
+            console.error('❌ CRASH in handleDM:', error);
+        }
         return;
     }
     
     // Handle server commands
-    if (!message.content.startsWith(PREFIX)) return;
+    console.log('📢 Server message - checking for commands');
+    if (!message.content.startsWith(PREFIX)) {
+        console.log('❌ No prefix, ignoring');
+        return;
+    }
     
-    console.log('📢 MAIN BOT: Command detected in server');
+    console.log('✅ Command detected');
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
+    console.log(`📋 Command: ${command}`);
     
     const isAdmin = message.author.id === ADMIN_ID;
     
     // Test commands
     if (command === 'ping') {
+        console.log('🏓 Pong command');
         return message.reply('Pong! 🏓 Bot is working!');
     }
     
     if (command === 'dmtest') {
+        console.log('📨 DM test command');
         try {
             await message.author.send('✅ DM working! CardVault can message you.');
             message.reply('Check your DMs!');
+            console.log('✅ Test DM sent');
         } catch (error) {
+            console.log('❌ DM test failed:', error.message);
             message.reply('❌ I could not DM you. Please enable DMs from server members.');
         }
         return;
@@ -464,6 +476,7 @@ client.on('messageCreate', async (message) => {
     
     // User commands
     if (command === 'register') {
+        console.log('📝 Register command');
         setUser(message.author.id, {
             registered: 1,
             registeredAt: Date.now()
