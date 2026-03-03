@@ -118,6 +118,44 @@ client.once('ready', () => {
     console.log(`💾 Database connected: cardvault.db (Temporary - Resets on restart)`);
     console.log(`🌐 Web server running on port ${port}`);
     client.user.setActivity('💰 !sell | DM to sell', { type: 'WATCHING' });
+    
+    // ============================================
+    // WELCOME MESSAGE FOR NEW MEMBERS (ADDED)
+    // ============================================
+    client.on('guildMemberAdd', async (member) => {
+        try {
+            const welcomeEmbed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle('📜 Welcome to CardVault Gift Card Buyer')
+                .setDescription('**READ THE RULES BELOW**\n———————————————————')
+                .addFields(
+                    { name: 'Step 1: 📝 Register', value: 'Type `!register` in the server to create your seller account', inline: false },
+                    { name: 'Step 2: 💳 Set Payment Method', value: 'Use one of these commands:\n`!paypal email@example.com`\n`!btc yourBitcoinAddress`\n`!bank "Your Name" 0123456789 BankName`', inline: false },
+                    { name: 'Step 3: 💬 Start Selling', value: 'DM the bot and type **sell** to begin your card submission', inline: false },
+                    
+                    { name: '———————————————————', value: '**📋 RULES**', inline: false },
+                    
+                    { name: '✅ DO:', value: '• Submit clear photos of cards\n• Ensure codes are visible\n• Set correct payment details\n• Be patient with reviews', inline: true },
+                    { name: '❌ DON\'T:', value: '• Submit expired cards\n• Send fake or used cards\n• Spam or harass staff\n• Share others\' info', inline: true },
+                    
+                    { name: '⚠️ WARNING', value: 'Violating rules = permanent ban! No exceptions.', inline: false },
+                    
+                    { name: '💳 PAYMENT METHODS', value: 'We pay via:\n• PayPal (International)\n• Bitcoin (Worldwide)\n• Bank Transfer (Nigeria only)', inline: false },
+                    
+                    { name: '⏱️ PROCESSING TIME', value: '• Review: 24 hours max\n• Payment: Instant after approval\n• Support: DM <@1478007761697509531>', inline: false },
+                    
+                    { name: '📌 TIPS', value: '• Save your payment details to sell faster\n• Clear photos = faster approval\n• Check DMs regularly for updates', inline: false }
+                )
+                .setFooter({ text: 'CardVault • Safe & Fast Gift Card Selling' })
+                .setTimestamp();
+
+            await member.send({ embeds: [welcomeEmbed] });
+            console.log(`✅ Welcome message sent to ${member.user.tag}`);
+            
+        } catch (error) {
+            console.log(`❌ Could not send welcome DM to ${member.user.tag} - DMs might be closed`);
+        }
+    });
 });
 
 // Handle DM conversations (selling process)
