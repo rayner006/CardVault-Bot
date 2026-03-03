@@ -54,8 +54,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,      // CRITICAL for reading message content
-        GatewayIntentBits.DirectMessages,      // CRITICAL for DMs
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.DirectMessages,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.DirectMessageTyping,
@@ -139,10 +139,37 @@ client.once('ready', () => {
     });
 });
 
+// ============================================
+// DEBUGGING SECTION - WILL LOG ALL DMs
+// ============================================
+client.on('messageCreate', (message) => {
+    // Log ALL messages for debugging
+    console.log('\n' + '🔍'.repeat(30));
+    console.log(`🔍 DEBUG: Message received at ${new Date().toLocaleTimeString()}`);
+    console.log(`   Author: ${message.author.tag} (${message.author.id})`);
+    console.log(`   Content: "${message.content}"`);
+    console.log(`   Is DM? ${message.guild === null ? 'YES 🔥' : 'NO'}`);
+    console.log(`   Channel: ${message.guild ? message.guild.name : 'DM'}`);
+    console.log('🔍'.repeat(30) + '\n');
+
+    // If it's a DM and not from a bot, send a test reply
+    if (message.guild === null && !message.author.bot) {
+        console.log('🎯🎯🎯 DM DETECTED BY DEBUGGER! 🎯🎯🎯');
+        
+        // Send a test reply to confirm DM works
+        message.reply(`🔍 **DEBUG BOT HERE!**\n\nI received your message: "${message.content}"\n\nYour main bot will now process this. If you don't get a proper response, the issue is in the main bot code, not Discord.`)
+            .then(() => console.log('✅ DEBUG: Test reply sent successfully!'))
+            .catch(err => console.log('❌ DEBUG: Could not send reply:', err.message));
+    }
+});
+// ============================================
+// END DEBUGGING SECTION
+// ============================================
+
 // Handle DM conversations
 async function handleDM(message) {
     console.log('='.repeat(50));
-    console.log('🚨 handleDM FUNCTION WAS CALLED!');
+    console.log('🚨 MAIN BOT: handleDM FUNCTION WAS CALLED!');
     console.log('='.repeat(50));
     console.log(`User: ${message.author.tag} (${message.author.id})`);
     console.log(`Message content: "${message.content}"`);
@@ -196,7 +223,7 @@ async function handleDM(message) {
             }
         }
         
-        // Continue existing session (rest of your handleDM code remains the same)
+        // Continue existing session
         console.log('🔄 User has active session, step:', sessions.get(userId).step);
         const session = sessions.get(userId);
         
@@ -399,94 +426,44 @@ async function handleDM(message) {
     }
 }
 
-// MAIN MESSAGE HANDLER - FIXED VERSION
+// MAIN MESSAGE HANDLER
 client.on('messageCreate', async (message) => {
-    // SUPER DETAILED DEBUG LOGGING
-    console.log('\n' + '🔷'.repeat(30));
-    console.log(`🔍 NEW MESSAGE RECEIVED AT ${new Date().toLocaleTimeString()}`);
-    console.log(`   Author: ${message.author.tag} (${message.author.id})`);
-    console.log(`   Content: "${message.content}"`);
-    console.log(`   Channel Type: ${message.channel.type}`);
-    console.log(`   Is DM? ${message.guild === null ? 'YES' : 'NO'}`);
-    console.log(`   Guild: ${message.guild ? message.guild.name : 'None (DM)'}`);
-    console.log(`   Is Bot? ${message.author.bot}`);
-    console.log('🔷'.repeat(30) + '\n');
-    
     // Ignore bot messages
     if (message.author.bot) return;
     
-    // ============================================
-    // FIXED DM DETECTION - This is the key fix!
-    // ============================================
+    // Handle DM messages
     if (message.guild === null) {
-        console.log('🎯✅ DM DETECTED! Calling handleDM function...');
+        console.log('🎯 MAIN BOT: DM detected, calling handleDM');
         await handleDM(message);
-        return; // Important: stop processing here
-    }
-    
-    console.log('📢 Server message detected, checking for commands...');
-    
-    // Handle server commands
-    if (!message.content.startsWith(PREFIX)) {
-        console.log('❌ Not a command (no prefix)');
         return;
     }
     
-    console.log('✅ Command detected, processing...');
+    // Handle server commands
+    if (!message.content.startsWith(PREFIX)) return;
+    
+    console.log('📢 MAIN BOT: Command detected in server');
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
-    console.log(`   Command: ${command}`);
-    console.log(`   Args: ${args.join(', ')}`);
     
     const isAdmin = message.author.id === ADMIN_ID;
     
-    // ============================================
-    // TEST COMMANDS
-    // ============================================
-    
+    // Test commands
     if (command === 'ping') {
-        console.log('🏓 Ping command received');
         return message.reply('Pong! 🏓 Bot is working!');
     }
     
     if (command === 'dmtest') {
-        console.log('📨 DM test command received');
         try {
             await message.author.send('✅ DM working! CardVault can message you.');
             message.reply('Check your DMs!');
-            console.log('✅ Test DM sent successfully');
         } catch (error) {
-            console.log('❌ Could not send DM:', error.message);
             message.reply('❌ I could not DM you. Please enable DMs from server members.');
         }
         return;
     }
     
-    if (command === 'debug') {
-        console.log('🔧 Debug command received');
-        const debugEmbed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle('🔧 Bot Debug Info')
-            .addFields(
-                { name: 'Bot Tag', value: client.user.tag, inline: true },
-                { name: 'Bot ID', value: client.user.id, inline: true },
-                { name: 'Prefix', value: PREFIX, inline: true },
-                { name: 'Admin ID', value: ADMIN_ID || 'Not set', inline: true },
-                { name: 'Is Admin?', value: isAdmin ? 'YES' : 'NO', inline: true },
-                { name: 'Message Content Intent', value: 'ENABLED (if you see this)', inline: true },
-                { name: 'Sessions Active', value: sessions.size.toString(), inline: true },
-                { name: 'Database', value: 'Connected', inline: true }
-            )
-            .setTimestamp();
-        return message.reply({ embeds: [debugEmbed] });
-    }
-    
-    // ============================================
-    // USER COMMANDS
-    // ============================================
-    
+    // User commands
     if (command === 'register') {
-        console.log('📝 Register command for user:', message.author.id);
         setUser(message.author.id, {
             registered: 1,
             registeredAt: Date.now()
@@ -646,10 +623,7 @@ client.on('messageCreate', async (message) => {
         return message.reply({ embeds: [embed] });
     }
     
-    // ============================================
-    // ADMIN COMMANDS
-    // ============================================
-    
+    // Admin commands
     if (command === 'pending' && isAdmin) {
         try {
             const stmt = db.prepare("SELECT * FROM transactions WHERE status = 'pending' ORDER BY submittedAt DESC");
