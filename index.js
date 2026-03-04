@@ -797,7 +797,7 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 // ============================================
-// MAIN INTERACTION HANDLER (Slash Commands, Buttons, Select Menus, Modals)
+// MAIN INTERACTION HANDLER
 // ============================================
 
 client.on('interactionCreate', async (interaction) => {
@@ -946,6 +946,7 @@ async function handleSlashCommand(interaction) {
                     });
                 }
                 
+                // Create payment method selection buttons with FIXED emojis
                 const row = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -957,7 +958,7 @@ async function handleSlashCommand(interaction) {
                             .setCustomId('sell_bitcoin')
                             .setLabel('Bitcoin')
                             .setStyle(ButtonStyle.Primary)
-                            .setEmoji('₿'),
+                            .setEmoji('🪙'), // FIXED: Changed from ₿ to 🪙
                         new ButtonBuilder()
                             .setCustomId('sell_bank')
                             .setLabel('Bank Transfer')
@@ -965,10 +966,17 @@ async function handleSlashCommand(interaction) {
                             .setEmoji('🏦')
                     );
                 
-                await user.send({
-                    content: '👋 **Welcome to CardVault!**\n\nClick a button below to choose your payment method:',
-                    components: [row]
-                });
+                // Try to send with buttons
+                try {
+                    await user.send({
+                        content: '👋 **Welcome to CardVault!**\n\nClick a button below to choose your payment method:',
+                        components: [row]
+                    });
+                } catch (buttonError) {
+                    console.error('[BUTTON ERROR]', buttonError);
+                    // Fallback: send without buttons
+                    await user.send('👋 **Welcome to CardVault!**\n\nPlease use /paypal, /btc, or /bank to set up your payment method first.');
+                }
                 
                 await interaction.reply({ 
                     content: '✅ **DM opened!** Check your DMs to start selling.',
@@ -1674,4 +1682,4 @@ client.login(CONFIG.TOKEN).then(() => {
 }).catch((error) => {
     console.error('[BOT] Login failed:', error.message);
     process.exit(1);
-});  
+});
