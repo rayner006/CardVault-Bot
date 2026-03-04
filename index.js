@@ -1674,4 +1674,4 @@ client.login(CONFIG.TOKEN).then(() => {
 }).catch((error) => {
     console.error('[BOT] Login failed:', error.message);
     process.exit(1);
-});
+});  
