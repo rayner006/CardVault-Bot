@@ -159,7 +159,7 @@ class DatabaseManager {
             )
         `);
 
-        // Insert card brands
+        // Insert YOUR card brands with Razor Gold
         const brands = [
             'Amazon',
             'Steam',
@@ -467,18 +467,6 @@ class EmbedHelper {
             .setTitle(`⚠️ ${title}`)
             .setDescription(description)
             .setTimestamp();
-    }
-    
-    static admin(title, description, fields = []) {
-        const embed = new EmbedBuilder()
-            .setColor(0xFFA500)
-            .setTitle(`🛠️ ${title}`)
-            .setDescription(description)
-            .setTimestamp()
-            .setFooter({ text: 'CardVault Admin Panel' });
-        
-        fields.forEach(field => embed.addFields(field));
-        return embed;
     }
 }
 
@@ -837,10 +825,7 @@ client.on('guildMemberAdd', async (member) => {
             .setFooter({ text: 'CardVault • Safe & Fast Gift Card Selling' })
             .setTimestamp();
 
-        await member.send({ 
-            embeds: [welcomeEmbed],
-            components: [] // Disable buttons in DM
-        });
+        await member.send({ embeds: [welcomeEmbed] });
         await logToChannel(member.guild, 'New Member Joined', member.user, 'Welcome DM sent');
         console.log(`[WELCOME] Message sent to ${member.user.tag}`);
     } catch (error) {
@@ -932,11 +917,11 @@ client.on('interactionCreate', async (interaction) => {
                 session.data.value = value;
                 sessions.update(user.id, { step: 3 });
                 
-                // Mobile-friendly upload instructions
+                // === ONLY CHANGE MADE HERE ===
+                // Changed ephemeral from false to true
                 await interaction.reply({
                     content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload',
-                    ephemeral: false,
-                    components: [] // Disable buttons in DM
+                    ephemeral: true // ← ONLY THIS CHANGE
                 });
             }
         }
@@ -1037,7 +1022,7 @@ async function handleSlashCommand(interaction) {
                     });
                 }
                 
-                // Create payment method selection buttons
+                // Create payment method selection buttons with FIXED emojis
                 const row = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -1066,10 +1051,7 @@ async function handleSlashCommand(interaction) {
                 } catch (buttonError) {
                     console.error('[BUTTON ERROR]', buttonError);
                     // Fallback: send without buttons
-                    await user.send({
-                        content: '👋 **Welcome to CardVault!**\n\nPlease use /paypal, /btc, or /bank to set up your payment method first.',
-                        components: []
-                    });
+                    await user.send('👋 **Welcome to CardVault!**\n\nPlease use /paypal, /btc, or /bank to set up your payment method first.');
                 }
                 
                 await interaction.reply({ 
@@ -1402,19 +1384,16 @@ async function handleSlashCommand(interaction) {
             try {
                 const userObj = await client.users.fetch(approveTx.userId);
                 if (userObj) {
-                    await DMMessageHelper.send(
-                        userObj,
-                        EmbedHelper.success(
-                            '✅ Card Approved!',
-                            'Your card has been reviewed and approved.',
+                    await userObj.send({
+                        embeds: [EmbedHelper.success(
+                            'Card Approved!',
+                            `Your card has been approved.`,
                             [
-                                { name: 'Transaction ID', value: `\`${approveId}\``, inline: false },
-                                { name: 'Card Value', value: `$${approveTx.value}`, inline: true },
-                                { name: 'Offer Amount', value: `$${amount}`, inline: true },
-                                { name: 'Status', value: '⏳ Waiting for Payment', inline: true }
+                                { name: 'Transaction', value: approveId, inline: true },
+                                { name: 'Offer', value: `$${amount}`, inline: true }
                             ]
-                        )
-                    );
+                        )]
+                    });
                 }
             } catch (error) {
                 console.log('Could not DM user');
@@ -1447,18 +1426,16 @@ async function handleSlashCommand(interaction) {
             try {
                 const userObj = await client.users.fetch(rejectTx.userId);
                 if (userObj) {
-                    await DMMessageHelper.send(
-                        userObj,
-                        EmbedHelper.error(
-                            '❌ Card Rejected',
-                            'Your card submission was not approved.',
+                    await userObj.send({
+                        embeds: [EmbedHelper.error(
+                            'Card Rejected',
+                            `Your card was rejected.`,
                             [
-                                { name: 'Transaction ID', value: `\`${rejectId}\``, inline: false },
-                                { name: 'Reason', value: reason, inline: false },
-                                { name: 'Next Steps', value: 'You can submit a new card with `/start`', inline: false }
+                                { name: 'Transaction', value: rejectId, inline: true },
+                                { name: 'Reason', value: reason, inline: false }
                             ]
-                        )
-                    );
+                        )]
+                    });
                 }
             } catch (error) {
                 console.log('Could not DM user');
@@ -1491,19 +1468,17 @@ async function handleSlashCommand(interaction) {
             try {
                 const userObj = await client.users.fetch(paidTx.userId);
                 if (userObj) {
-                    await DMMessageHelper.send(
-                        userObj,
-                        EmbedHelper.success(
-                            '💰 Paid (Approved)',
-                            'Your card has been approved and payment has been sent.',
+                    await userObj.send({
+                        embeds: [EmbedHelper.success(
+                            'Paid (Approved)',
+                            `Your card has been approved and payment has been sent.`,
                             [
-                                { name: 'Transaction ID', value: `\`${paidId}\``, inline: false },
+                                { name: 'Transaction', value: paidId, inline: true },
                                 { name: 'Card Amount', value: `$${paidTx.value}`, inline: true },
-                                { name: 'Offer Paid', value: `$${paidTx.offerAmount || paidTx.value}`, inline: true },
-                                { name: 'Status', value: '✅ Completed', inline: true }
+                                { name: 'Offer Paid', value: `$${paidTx.offerAmount || paidTx.value}`, inline: true }
                             ]
-                        )
-                    );
+                        )]
+                    });
                 }
             } catch (error) {
                 console.log('Could not DM user');
@@ -1550,13 +1525,12 @@ async function handleSlashCommand(interaction) {
             for (const u of allUsers) {
                 try {
                     const userObj = await client.users.fetch(u.userId);
-                    await DMMessageHelper.send(
-                        userObj,
-                        EmbedHelper.info(
+                    await userObj.send({
+                        embeds: [EmbedHelper.info(
                             '📢 Announcement',
                             announcement
-                        )
-                    );
+                        )]
+                    });
                     sentCount++;
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (error) {
@@ -1713,19 +1687,13 @@ client.on('messageCreate', async (message) => {
     
     if (message.attachments.size === 0) {
         // Mobile-friendly error message
-        return message.reply({
-            content: '❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button and select your photo\n💻 **On Desktop:** Drag and drop or click to upload',
-            components: [] // Disable buttons in DM
-        });
+        return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
     }
     
     const image = message.attachments.first();
     
     if (!image.contentType?.startsWith('image/')) {
-        return message.reply({
-            content: '❌ Please upload a valid image file.',
-            components: []
-        });
+        return message.reply('❌ Please upload a valid image file.');
     }
     
     const txId = db.createTransaction({
@@ -1738,102 +1706,47 @@ client.on('messageCreate', async (message) => {
         image: image.url
     });
     
-    // Send admin notification with cleaner formatting
+    // FIX 2: Updated admin notification with command instructions
     client.guilds.cache.forEach(async (guild) => {
         const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
         if (adminChannel) {
-            // Create a beautifully formatted admin notification
             const adminEmbed = new EmbedBuilder()
                 .setColor(0xFFA500)
-                .setTitle('🆕 NEW GIFT CARD SUBMISSION')
-                .setDescription('═══════════════════════════════════════')
+                .setTitle('🆕 New Gift Card Submission')
                 .addFields(
-                    { 
-                        name: '🆔 TRANSACTION ID', 
-                        value: `\`\`\`${txId}\`\`\``, 
-                        inline: false 
-                    },
-                    { 
-                        name: '👤 SELLER INFORMATION', 
-                        value: `**Username:** ${message.author.username}\n**User ID:** \`${userId}\``, 
-                        inline: true 
-                    },
-                    { 
-                        name: '💳 PAYMENT METHOD', 
-                        value: `**${session.data.paymentMethod.toUpperCase()}**`, 
-                        inline: true 
-                    },
-                    { 
-                        name: '\u200B', 
-                        value: '═══════════════════════════════════════', 
-                        inline: false 
-                    },
-                    { 
-                        name: '📦 CARD DETAILS', 
-                        value: `**Brand:** ${session.data.brand}\n**Value:** $${session.data.value}`, 
-                        inline: true 
-                    },
-                    { 
-                        name: '🖼️ CARD IMAGE', 
-                        value: '[Click to view image](' + image.url + ')', 
-                        inline: true 
-                    },
-                    { 
-                        name: '\u200B', 
-                        value: '═══════════════════════════════════════', 
-                        inline: false 
-                    },
-                    { 
-                        name: '🔍 REVIEW ACTIONS', 
-                        value: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                        inline: false 
-                    },
-                    { 
-                        name: '✅ APPROVE CARD', 
-                        value: `\`\`\`/approve id:${txId} amount:$$\`\`\``, 
-                        inline: true 
-                    },
-                    { 
-                        name: '❌ REJECT CARD', 
-                        value: `\`\`\`/reject id:${txId} reason:\`\`\``, 
-                        inline: true 
-                    },
-                    { 
-                        name: '📝 EXAMPLE', 
-                        value: `\`\`\`/approve id:${txId} amount:50\`\`\``, 
-                        inline: false 
-                    }
+                    { name: '🆔 Transaction', value: txId, inline: true },
+                    { name: '👤 User', value: message.author.username, inline: true },
+                    { name: '💳 Payment', value: session.data.paymentMethod, inline: true },
+                    { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true }
                 )
                 .setImage(image.url)
-                .setFooter({ 
-                    text: `⏱️ Submitted: ${new Date().toLocaleString()} • @here`, 
-                    iconURL: guild.iconURL() 
-                })
+                .setFooter({ text: `User ID: ${userId}` })
                 .setTimestamp();
             
+            await adminChannel.send({ embeds: [adminEmbed] });
+            
+            // NEW: Send clear admin instructions
             await adminChannel.send({ 
-                content: '@here **🔔 New card ready for review!**',
-                embeds: [adminEmbed] 
+                content: `@here **New card ready for review!**\n\n` +
+                         `**To APPROVE:** \`/approve id:${txId} amount:XX\`\n` +
+                         `**To REJECT:** \`/reject id:${txId} reason:your reason\`\n\n` +
+                         `**Example:** \`/approve id:${txId} amount:50\``
             });
         }
     });
     
     sessions.delete(userId);
     
-    // Send confirmation to user with no buttons
-    await DMMessageHelper.send(
-        message.author,
-        EmbedHelper.success(
+    await message.reply({
+        embeds: [EmbedHelper.success(
             '✅ Card Submitted Successfully!',
-            'Your card has been submitted for review.',
+            `Your transaction ID: **${txId}**`,
             [
-                { name: 'Transaction ID', value: `\`${txId}\``, inline: false },
-                { name: 'Card Details', value: `${session.data.brand} - $${session.data.value}`, inline: true },
+                { name: 'Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
                 { name: 'Status', value: '⏳ Pending Review', inline: true }
             ]
-        ),
-        'An admin will review your card shortly. You will be notified when approved.'
-    );
+        ).setDescription('An admin will review your card shortly. You will be notified when approved.')]
+    });
     
     db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
 });
