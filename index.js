@@ -160,7 +160,7 @@ class DatabaseManager {
             )
         `);
 
-        // ===== UPDATED: Insert YOUR card brands =====
+        // ===== UPDATED: Insert YOUR card brands with Razor Gold =====
         const brands = [
             'Amazon',
             'Steam',
@@ -175,6 +175,7 @@ class DatabaseManager {
             'Nike',
             'Mastercard',
             'Xbox',
+            'Razor Gold',
             'Vanilla'
         ];
         const insertBrand = this.db.prepare('INSERT OR IGNORE INTO card_brands (name) VALUES (?)');
@@ -738,7 +739,7 @@ client.once('ready', () => {
 });
 
 // ============================================
-// WELCOME MESSAGE HANDLER - UPDATED WITH YOUR CARD LIST
+// WELCOME MESSAGE HANDLER - UPDATED WITH RAZOR GOLD
 // ============================================
 
 client.on('guildMemberAdd', async (member) => {
@@ -775,7 +776,7 @@ client.on('guildMemberAdd', async (member) => {
                 },
                 { 
                     name: '🎮 ACCEPTED CARDS:', 
-                    value: 'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Vanilla', 
+                    value: 'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Razor Gold • Vanilla', 
                     inline: false 
                 },
                 { name: '———————————————————', value: '**📋 RULES**', inline: false },
@@ -1102,7 +1103,7 @@ async function handleSlashCommand(interaction) {
                         '`/bank` - Set Bank details', 
                         inline: false },
                     { name: '🎮 **Accepted Cards**', value: 
-                        'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Vanilla', 
+                        'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Razor Gold • Vanilla', 
                         inline: false },
                     { name: '📊 **Server Info**', value: 
                         '`/members` - Member stats\n' +
@@ -1516,7 +1517,7 @@ async function handleButton(interaction) {
             session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
         }
         
-        // Get card brands for select menu (NOW WITH YOUR FULL LIST)
+        // Get card brands for select menu (NOW WITH YOUR FULL LIST INCLUDING RAZOR GOLD)
         const brands = db.getCardBrands();
         
         const selectMenu = new StringSelectMenuBuilder()
