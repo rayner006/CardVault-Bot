@@ -2,7 +2,8 @@
  * CARDVAULT GIFT CARD BUYER BOT
  * A professional Discord bot for buying and selling gift cards
  * 
- * @version 2.0.1
+ * @version 3.0.0 - SLASH COMMANDS EDITION
+ * @features: Slash Commands Only, Buttons, Select Menus, Activity Logging
  * @author YourName
  * @license MIT
  */
@@ -10,9 +11,26 @@
 // ============================================
 // DEPENDENCIES
 // ============================================
-const { Client, GatewayIntentBits, EmbedBuilder, Collection } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    EmbedBuilder, 
+    Collection,
+    REST,
+    Routes,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder,
+    StringSelectMenuOptionBuilder,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    InteractionType
+} = require('discord.js');
 const Database = require('better-sqlite3');
 const express = require('express');
+const fs = require('fs');
 
 // ============================================
 // CONFIGURATION & INITIALIZATION
@@ -26,6 +44,8 @@ app.get('/', (req, res) => {
     res.json({
         status: 'online',
         bot: 'CardVault',
+        version: '3.0.0',
+        features: ['slash-commands', 'buttons', 'logging'],
         timestamp: new Date().toISOString()
     });
 });
@@ -37,14 +57,20 @@ app.listen(PORT, () => {
 // Environment variables
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
-    PREFIX: process.env.PREFIX || '!',
+    CLIENT_ID: process.env.CLIENT_ID,
+    GUILD_ID: process.env.GUILD_ID, // For testing - remove for global commands
     ADMIN_ID: process.env.ADMIN_ID,
-    SUPPORT_ID: process.env.SUPPORT_ID || '1478007761697509531'
+    SUPPORT_ID: process.env.SUPPORT_ID || '1478007761697509531',
+    LOG_CHANNEL: 'cardvault-logs'
 };
 
 // Validate required config
 if (!CONFIG.TOKEN) {
     console.error('[ERROR] DISCORD_TOKEN is not set in environment variables');
+    process.exit(1);
+}
+if (!CONFIG.CLIENT_ID) {
+    console.error('[ERROR] CLIENT_ID is not set in environment variables');
     process.exit(1);
 }
 
@@ -56,11 +82,13 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildPresences,
         GatewayIntentBits.DirectMessageTyping,
         GatewayIntentBits.DirectMessageReactions
     ]
 });
+
+// Cooldowns map for rate limiting
+const cooldowns = new Map();
 
 // ============================================
 // DATABASE MANAGER
@@ -113,13 +141,29 @@ class DatabaseManager {
             )
         `);
 
-        // Create settings table
+        // Create logs table
         this.db.exec(`
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                action TEXT,
+                userId TEXT,
+                details TEXT,
+                timestamp INTEGER
             )
         `);
+
+        // Create card brands table
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS card_brands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE
+            )
+        `);
+
+        // Insert default brands
+        const brands = ['Amazon', 'Google Play', 'Steam', 'Xbox', 'PlayStation', 'Netflix', 'Spotify', 'iTunes', 'Visa', 'Mastercard', 'Razer Gold', 'Nintendo eShop'];
+        const insertBrand = this.db.prepare('INSERT OR IGNORE INTO card_brands (name) VALUES (?)');
+        brands.forEach(brand => insertBrand.run(brand));
     }
 
     // ===== USER METHODS =====
@@ -248,6 +292,13 @@ class DatabaseManager {
         return stmt.all(userId);
     }
 
+    // ===== BRAND METHODS =====
+    
+    getCardBrands() {
+        const stmt = this.db.prepare('SELECT name FROM card_brands ORDER BY name');
+        return stmt.all().map(b => b.name);
+    }
+
     // ===== STATS METHODS =====
     
     incrementUserStats(userId, value) {
@@ -259,10 +310,36 @@ class DatabaseManager {
         }
     }
 
+    getTopSellers(limit = 10) {
+        const stmt = this.db.prepare(`
+            SELECT * FROM users 
+            WHERE totalSold > 0 
+            ORDER BY totalSold DESC 
+            LIMIT ?
+        `);
+        return stmt.all(limit);
+    }
+
     // ===== LOGGING =====
     
     log(action, userId, details) {
         console.log(`[LOG] ${new Date().toLocaleTimeString()} | ${action} | ${userId} | ${details}`);
+        
+        // Also save to database
+        const stmt = this.db.prepare(`
+            INSERT INTO logs (action, userId, details, timestamp)
+            VALUES (?, ?, ?, ?)
+        `);
+        stmt.run(action, userId, details, Date.now());
+    }
+
+    getRecentLogs(limit = 50) {
+        const stmt = this.db.prepare(`
+            SELECT * FROM logs 
+            ORDER BY timestamp DESC 
+            LIMIT ?
+        `);
+        return stmt.all(limit);
     }
 }
 
@@ -374,6 +451,255 @@ class EmbedHelper {
 }
 
 // ============================================
+// LOGGING HELPER
+// ============================================
+
+async function logToChannel(guild, action, user, details) {
+    if (!guild) return;
+    
+    const logChannel = guild.channels.cache.find(c => c.name === CONFIG.LOG_CHANNEL);
+    if (!logChannel) return;
+    
+    const logEmbed = new EmbedBuilder()
+        .setColor(0x808080)
+        .setTitle(`📝 ${action}`)
+        .addFields(
+            { name: 'User', value: `${user.tag} (${user.id})`, inline: true },
+            { name: 'Time', value: new Date().toLocaleString(), inline: true },
+            { name: 'Details', value: details, inline: false }
+        )
+        .setTimestamp();
+    
+    await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
+}
+
+// ============================================
+// SLASH COMMANDS REGISTRATION
+// ============================================
+
+const commands = [
+    // User Commands
+    {
+        name: 'register',
+        description: 'Create your seller account',
+    },
+    {
+        name: 'start',
+        description: 'Open DM to start selling gift cards',
+    },
+    {
+        name: 'profile',
+        description: 'View your profile or another user',
+        options: [
+            {
+                name: 'user',
+                description: 'User to view profile (leave empty for yourself)',
+                type: 6, // USER type
+                required: false
+            }
+        ]
+    },
+    {
+        name: 'paypal',
+        description: 'Set your PayPal email',
+        options: [
+            {
+                name: 'email',
+                description: 'Your PayPal email address',
+                type: 3, // STRING type
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'btc',
+        description: 'Set your Bitcoin address',
+        options: [
+            {
+                name: 'address',
+                description: 'Your Bitcoin wallet address',
+                type: 3,
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'bank',
+        description: 'Set your bank details',
+        options: [
+            {
+                name: 'name',
+                description: 'Your full account name (use quotes if needed)',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'number',
+                description: 'Your account number',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'bank',
+                description: 'Your bank name',
+                type: 3,
+                required: true
+            }
+        ]
+    },
+    {
+        name: 'help',
+        description: 'Show all available commands',
+    },
+    {
+        name: 'ping',
+        description: 'Check bot latency',
+    },
+    {
+        name: 'members',
+        description: 'Show server member statistics',
+    },
+    {
+        name: 'users',
+        description: 'List human members in server',
+    },
+    {
+        name: 'bots',
+        description: 'List bots in server',
+    },
+    {
+        name: 'leaderboard',
+        description: 'Show top sellers',
+    },
+    
+    // Admin Commands
+    {
+        name: 'pending',
+        description: 'Show all pending transactions (Admin only)',
+        default_member_permissions: '0' // Restrict to admins
+    },
+    {
+        name: 'transaction',
+        description: 'View transaction details (Admin only)',
+        options: [
+            {
+                name: 'id',
+                description: 'Transaction ID',
+                type: 3,
+                required: true
+            }
+        ],
+        default_member_permissions: '0'
+    },
+    {
+        name: 'approve',
+        description: 'Approve a pending transaction (Admin only)',
+        options: [
+            {
+                name: 'id',
+                description: 'Transaction ID',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'amount',
+                description: 'Amount to pay',
+                type: 4, // INTEGER type
+                required: true
+            }
+        ],
+        default_member_permissions: '0'
+    },
+    {
+        name: 'reject',
+        description: 'Reject a pending transaction (Admin only)',
+        options: [
+            {
+                name: 'id',
+                description: 'Transaction ID',
+                type: 3,
+                required: true
+            },
+            {
+                name: 'reason',
+                description: 'Reason for rejection',
+                type: 3,
+                required: false
+            }
+        ],
+        default_member_permissions: '0'
+    },
+    {
+        name: 'paid',
+        description: 'Mark transaction as paid (Admin only)',
+        options: [
+            {
+                name: 'id',
+                description: 'Transaction ID',
+                type: 3,
+                required: true
+            }
+        ],
+        default_member_permissions: '0'
+    },
+    {
+        name: 'logs',
+        description: 'View recent logs (Admin only)',
+        options: [
+            {
+                name: 'limit',
+                description: 'Number of logs to show',
+                type: 4,
+                required: false,
+                min_value: 1,
+                max_value: 100
+            }
+        ],
+        default_member_permissions: '0'
+    },
+    {
+        name: 'announce',
+        description: 'Send announcement to all users (Admin only)',
+        options: [
+            {
+                name: 'message',
+                description: 'Announcement message',
+                type: 3,
+                required: true
+            }
+        ],
+        default_member_permissions: '0'
+    }
+];
+
+// Register slash commands
+const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
+
+(async () => {
+    try {
+        console.log('[SLASH] Registering slash commands...');
+        
+        if (CONFIG.GUILD_ID) {
+            // Guild commands (instant, for testing)
+            await rest.put(
+                Routes.applicationGuildCommands(CONFIG.CLIENT_ID, CONFIG.GUILD_ID),
+                { body: commands }
+            );
+            console.log(`[SLASH] Registered ${commands.length} commands for guild ${CONFIG.GUILD_ID}`);
+        } else {
+            // Global commands (can take up to 1 hour to propagate)
+            await rest.put(
+                Routes.applicationCommands(CONFIG.CLIENT_ID),
+                { body: commands }
+            );
+            console.log(`[SLASH] Registered ${commands.length} global commands`);
+        }
+    } catch (error) {
+        console.error('[SLASH] Failed to register commands:', error);
+    }
+})();
+
+// ============================================
 // BOT READY EVENT
 // ============================================
 
@@ -384,12 +710,13 @@ client.once('ready', () => {
     console.log(`🤖 Bot Tag: ${client.user.tag}`);
     console.log(`🆔 Bot ID: ${client.user.id}`);
     console.log(`📊 Servers: ${client.guilds.cache.size}`);
-    console.log(`🔧 Prefix: ${CONFIG.PREFIX}`);
+    console.log(`🔧 Slash Commands: ${commands.length}`);
     console.log(`👑 Admin ID: ${CONFIG.ADMIN_ID}`);
+    console.log(`📝 Log Channel: #${CONFIG.LOG_CHANNEL}`);
     console.log('='.repeat(50) + '\n');
 
     // Set bot status
-    client.user.setActivity(`${CONFIG.PREFIX}start | Begin selling`, { 
+    client.user.setActivity('/start | Begin selling', { 
         type: 'WATCHING' 
     });
 });
@@ -407,17 +734,17 @@ client.on('guildMemberAdd', async (member) => {
             .addFields(
                 { 
                     name: 'Step 1: 📝 Register', 
-                    value: `Type \`${CONFIG.PREFIX}register\` in the server to create your seller account`, 
+                    value: `Type \`/register\` in the server to create your seller account`, 
                     inline: false 
                 },
                 { 
                     name: 'Step 2: 💳 Set Payment Method', 
-                    value: `Use one of these commands:\n\`${CONFIG.PREFIX}paypal email@example.com\`\n\`${CONFIG.PREFIX}btc yourBitcoinAddress\`\n\`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 BankName\``, 
+                    value: `Use these commands:\n\`/paypal email:email@example.com\`\n\`/btc address:yourBitcoinAddress\`\n\`/bank name:"Your Full Name" number:0123456789 bank:BankName\``, 
                     inline: false 
                 },
                 { 
                     name: 'Step 3: 🚀 Start Selling', 
-                    value: `Type \`${CONFIG.PREFIX}start\` or \`${CONFIG.PREFIX}hello\` in the server to open a DM, then send **sell**`, 
+                    value: `Type \`/start\` in the server to open a DM, then follow the buttons`, 
                     inline: false 
                 },
                 { name: '———————————————————', value: '**📋 RULES**', inline: false },
@@ -441,6 +768,10 @@ client.on('guildMemberAdd', async (member) => {
             .setTimestamp();
 
         await member.send({ embeds: [welcomeEmbed] });
+        
+        // Log to channel
+        await logToChannel(member.guild, 'New Member Joined', member.user, 'Welcome DM sent');
+        
         console.log(`[WELCOME] Message sent to ${member.user.tag}`);
     } catch (error) {
         console.log(`[WELCOME] Could not send DM to ${member.user.tag} - DMs closed`);
@@ -448,643 +779,894 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 // ============================================
-// DM MESSAGE HANDLER (Selling Flow)
+// INTERACTION HANDLER (Slash Commands & Buttons)
 // ============================================
 
-async function handleDM(message) {
-    const userId = message.author.id;
-    const content = message.content.toLowerCase().trim();
-    
+client.on('interactionCreate', async (interaction) => {
     try {
-        // Check if user is banned
-        const user = db.getUser(userId);
-        if (user?.isBanned) {
-            return message.reply('❌ You are banned from using CardVault.');
-        }
-
-        // Get or create session
-        let session = sessions.get(userId);
-        
-        // If no session and not "sell", show welcome
-        if (!session && content !== 'sell') {
-            return message.reply({
-                embeds: [EmbedHelper.info(
-                    'Welcome to CardVault!',
-                    'To sell a gift card, type **sell** to begin the submission process.'
-                )]
-            });
-        }
-
-        // Handle "sell" command - start new session
-        if (content === 'sell') {
-            // Check if registered
-            if (!user || !user.registered) {
-                return message.reply({
-                    embeds: [EmbedHelper.error(
-                        'Registration Required',
-                        `You need to register first! Go to the server and type \`${CONFIG.PREFIX}register\``
-                    )]
+        // Handle slash commands
+        if (interaction.isChatInputCommand()) {
+            // Check cooldown (except for admins)
+            if (interaction.user.id !== CONFIG.ADMIN_ID) {
+                const cooldownTime = 3; // 3 seconds
+                const key = `${interaction.user.id}-${interaction.commandName}`;
+                
+                if (cooldowns.has(key)) {
+                    const expires = cooldowns.get(key);
+                    if (Date.now() < expires) {
+                        const timeLeft = ((expires - Date.now()) / 1000).toFixed(1);
+                        return interaction.reply({ 
+                            content: `⏱️ Slow down! Wait ${timeLeft}s before using this command again.`,
+                            ephemeral: true 
+                        });
+                    }
+                }
+                
+                cooldowns.set(key, Date.now() + (cooldownTime * 1000));
+            }
+            
+            // Check if user is banned
+            const userData = db.getUser(interaction.user.id);
+            if (userData?.isBanned) {
+                return interaction.reply({ 
+                    content: '❌ You are banned from using CardVault.',
+                    ephemeral: true 
                 });
             }
-
-            // Create new session
-            session = sessions.create(userId);
             
-            return message.reply({
-                embeds: [EmbedHelper.info(
-                    '💳 Choose Payment Method',
-                    'How do you want to get paid?',
-                    [
-                        { name: '1️⃣', value: 'PayPal (International)', inline: true },
-                        { name: '2️⃣', value: 'Bitcoin (Crypto)', inline: true },
-                        { name: '3️⃣', value: 'Bank Transfer (Nigeria)', inline: true }
-                    ]
-                ).setFooter({ text: 'Reply with 1, 2, or 3' })]
-            });
+            // Handle each command
+            await handleSlashCommand(interaction);
+            
+            // Log command usage
+            await logToChannel(
+                interaction.guild,
+                'Command Used',
+                interaction.user,
+                `/${interaction.commandName}`
+            );
         }
-
-        // If no session at this point, something's wrong
-        if (!session) {
-            return message.reply('Welcome to CardVault! Type **sell** to start.');
+        
+        // Handle button interactions
+        else if (interaction.isButton()) {
+            await handleButton(interaction);
         }
-
-        // Process based on current step
-        switch (session.step) {
-            case 1: // Payment method selection
-                if (!['1', '2', '3'].includes(content)) {
-                    return message.reply('❌ Please reply with **1**, **2**, or **3**');
-                }
-
-                const method = content === '1' ? 'paypal' : content === '2' ? 'bitcoin' : 'bank';
-                session.data.paymentMethod = method;
-
-                // Check if payment details exist
-                if (method === 'paypal' && !user.paypal) {
-                    sessions.delete(userId);
-                    return message.reply({
-                        embeds: [EmbedHelper.error(
-                            'PayPal Not Set',
-                            `You need to set your PayPal email first!\nUse \`${CONFIG.PREFIX}paypal email@example.com\` in the server.`
-                        )]
-                    });
-                }
-
-                if (method === 'bitcoin' && !user.btc) {
-                    sessions.delete(userId);
-                    return message.reply({
-                        embeds: [EmbedHelper.error(
-                            'Bitcoin Address Not Set',
-                            `You need to set your Bitcoin address first!\nUse \`${CONFIG.PREFIX}btc your_address\` in the server.`
-                        )]
-                    });
-                }
-
-                if (method === 'bank' && !user.bankName) {
-                    sessions.delete(userId);
-                    return message.reply({
-                        embeds: [EmbedHelper.error(
-                            'Bank Details Not Set',
-                            `You need to set your bank details first!\nUse \`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 BankName\` in the server.`
-                        )]
-                    });
-                }
-
-                // Store payment detail for later
-                if (method === 'paypal') session.data.paymentDetail = user.paypal;
-                if (method === 'bitcoin') session.data.paymentDetail = user.btc;
-                if (method === 'bank') {
-                    session.data.paymentDetail = `${user.bankName} | ${user.bankNumber} | ${user.bankAccount}`;
-                }
-
-                sessions.nextStep(userId);
-                return message.reply(
-                    '**Great! Now tell me the card brand**\n' +
-                    'Examples: Amazon, Visa, Steam, Google Play, Xbox, etc.'
-                );
-
-            case 2: // Card brand
-                session.data.brand = message.content;
-                sessions.nextStep(userId);
-                return message.reply(
-                    '**What is the card value?**\n' +
-                    'Please enter the amount in USD (e.g., 25, 50, 100)'
-                );
-
-            case 3: // Card value
-                const value = parseInt(message.content);
-                if (isNaN(value) || value <= 0) {
-                    return message.reply('❌ Please enter a valid number (e.g., 25, 50, 100)');
-                }
-                session.data.value = value;
-                sessions.nextStep(userId);
-                return message.reply(
-                    '**Please upload a CLEAR photo of the card**\n' +
-                    'Make sure the code is visible!'
-                );
-
-            case 4: // Image upload
-                if (message.attachments.size === 0) {
-                    return message.reply('❌ Please upload an image of the card');
-                }
-
-                const image = message.attachments.first();
-                
-                // Create transaction
-                const txId = db.createTransaction({
-                    userId,
-                    username: message.author.username,
-                    paymentMethod: session.data.paymentMethod,
-                    paymentDetail: session.data.paymentDetail,
-                    brand: session.data.brand,
-                    value: session.data.value,
-                    image: image.url
-                });
-
-                // Notify admin channel
-                const adminChannel = client.channels.cache.find(c => c.name === 'admin');
-                if (adminChannel) {
-                    const adminEmbed = new EmbedBuilder()
-                        .setColor(0xFFA500)
-                        .setTitle('🆕 New Gift Card Submission')
-                        .addFields(
-                            { name: '🆔 Transaction', value: txId, inline: true },
-                            { name: '👤 User', value: message.author.username, inline: true },
-                            { name: '💳 Payment', value: session.data.paymentMethod, inline: true },
-                            { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true }
-                        )
-                        .setImage(image.url)
-                        .setFooter({ text: `User ID: ${userId}` })
-                        .setTimestamp();
-
-                    await adminChannel.send({ embeds: [adminEmbed] });
-                    await adminChannel.send(`<@${CONFIG.ADMIN_ID}> New card ready for review!`);
-                }
-
-                // Clear session
-                sessions.delete(userId);
-
-                // Send confirmation to user
-                return message.reply({
-                    embeds: [EmbedHelper.success(
-                        '✅ Card Submitted Successfully!',
-                        `Your transaction ID: **${txId}**`,
-                        [
-                            { name: 'Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
-                            { name: 'Status', value: '⏳ Pending Review', inline: true }
-                        ]
-                    ).setDescription('An admin will review your card shortly. You will be notified when approved.')]
-                });
-
-            default:
-                sessions.delete(userId);
-                return message.reply('Something went wrong. Please type **sell** to start over.');
+        
+        // Handle select menu interactions
+        else if (interaction.isStringSelectMenu()) {
+            await handleSelectMenu(interaction);
         }
-
+        
     } catch (error) {
-        console.error('[ERROR] in handleDM:', error);
-        return message.reply('❌ An error occurred. Please try again later.');
+        console.error('[ERROR] Interaction error:', error);
+        
+        const errorMessage = '❌ An error occurred while processing your request.';
+        
+        if (interaction.replied || interaction.deferred) {
+            await interaction.followUp({ content: errorMessage, ephemeral: true });
+        } else {
+            await interaction.reply({ content: errorMessage, ephemeral: true });
+        }
+    }
+});
+
+// ============================================
+// SLASH COMMAND HANDLER
+// ============================================
+
+async function handleSlashCommand(interaction) {
+    const { commandName, options, user, guild } = interaction;
+    
+    // Check admin commands
+    const isAdmin = user.id === CONFIG.ADMIN_ID;
+    const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce'];
+    
+    if (adminCommands.includes(commandName) && !isAdmin) {
+        return interaction.reply({ 
+            content: '❌ This command is for admins only.',
+            ephemeral: true 
+        });
+    }
+    
+    switch (commandName) {
+        // ===== USER COMMANDS =====
+        
+        case 'ping':
+            await interaction.reply({
+                embeds: [EmbedHelper.success(
+                    'Pong! 🏓',
+                    `Bot latency: ${Date.now() - interaction.createdTimestamp}ms\nAPI Latency: ${Math.round(client.ws.ping)}ms`
+                )]
+            });
+            break;
+            
+        case 'register':
+            const userData = db.createUser(user.id);
+            await interaction.reply({
+                embeds: [EmbedHelper.success(
+                    '✅ Registration Successful!',
+                    'You can now sell gift cards!',
+                    [
+                        { name: '📍 Next Step', value: `Use \`/start\` to open DM and begin selling`, inline: false },
+                        { name: '💳 Set Payment Method', value: 
+                            `\`/paypal email:your@email.com\`\n` +
+                            `\`/btc address:yourBitcoinAddress\`\n` +
+                            `\`/bank name:"Your Name" number:0123456789 bank:BankName\``, inline: false }
+                    ]
+                )]
+            });
+            break;
+            
+        case 'start':
+            try {
+                // Check if registered
+                const registered = db.getUser(user.id);
+                if (!registered || !registered.registered) {
+                    return interaction.reply({ 
+                        content: '❌ You need to register first! Use `/register`',
+                        ephemeral: true 
+                    });
+                }
+                
+                await user.send('👋 **Welcome to CardVault!**\n\nClick the button below to start selling.');
+                
+                // Create payment method selection buttons
+                const row = new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId('sell_paypal')
+                            .setLabel('PayPal')
+                            .setStyle(ButtonStyle.Success)
+                            .setEmoji('💳'),
+                        new ButtonBuilder()
+                            .setCustomId('sell_bitcoin')
+                            .setLabel('Bitcoin')
+                            .setStyle(ButtonStyle.Primary)
+                            .setEmoji('₿'),
+                        new ButtonBuilder()
+                            .setCustomId('sell_bank')
+                            .setLabel('Bank Transfer')
+                            .setStyle(ButtonStyle.Secondary)
+                            .setEmoji('🏦')
+                    );
+                
+                await user.send({
+                    content: '**Choose your payment method:**',
+                    components: [row]
+                });
+                
+                await interaction.reply({ 
+                    content: '✅ **DM opened!** Check your DMs to start selling.',
+                    ephemeral: true 
+                });
+            } catch (error) {
+                await interaction.reply({ 
+                    content: '❌ Could not DM you. Please enable DMs from server members.',
+                    ephemeral: true 
+                });
+            }
+            break;
+            
+        case 'profile':
+            const targetUser = options.getUser('user') || user;
+            const profileData = db.getUser(targetUser.id);
+            
+            if (!profileData) {
+                return interaction.reply({ 
+                    content: `❌ ${targetUser.username} is not registered.`,
+                    ephemeral: true 
+                });
+            }
+            
+            const transactions = db.getUserTransactions(targetUser.id);
+            const recentTx = transactions.length > 0 ? transactions[0] : null;
+            
+            const profileEmbed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle(`👤 ${targetUser.username}'s Profile`)
+                .setThumbnail(targetUser.displayAvatarURL())
+                .addFields(
+                    { name: '💳 PayPal', value: profileData.paypal || '❌ Not set', inline: false },
+                    { name: '₿ Bitcoin', value: profileData.btc || '❌ Not set', inline: false },
+                    { name: '🏦 Bank Transfer', value: profileData.bankName ? 
+                        `${profileData.bankName}\n${profileData.bankNumber}\n${profileData.bankAccount}` : 
+                        '❌ Not set', inline: false },
+                    { name: '💰 Cards Sold', value: `${profileData.totalSold || 0}`, inline: true },
+                    { name: '💵 Total Earned', value: `$${profileData.totalEarned || 0}`, inline: true }
+                )
+                .setTimestamp();
+            
+            if (recentTx) {
+                profileEmbed.addFields({ 
+                    name: '📋 Last Transaction', 
+                    value: `${recentTx.brand} - $${recentTx.value} (${recentTx.status})`, 
+                    inline: false 
+                });
+            }
+            
+            await interaction.reply({ embeds: [profileEmbed] });
+            break;
+            
+        case 'paypal':
+            const email = options.getString('email');
+            
+            if (!email.includes('@')) {
+                return interaction.reply({ 
+                    content: '❌ Please provide a valid email address.',
+                    ephemeral: true 
+                });
+            }
+            
+            db.setPaymentMethod(user.id, 'paypal', email);
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.success(
+                    'PayPal Email Set',
+                    `✅ Your PayPal email has been set to: **${email}**`
+                )]
+            });
+            break;
+            
+        case 'btc':
+            const address = options.getString('address');
+            
+            if (address.length < 10) {
+                return interaction.reply({ 
+                    content: '❌ Please provide a valid Bitcoin address.',
+                    ephemeral: true 
+                });
+            }
+            
+            db.setPaymentMethod(user.id, 'btc', address);
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.success(
+                    'Bitcoin Address Set',
+                    `✅ Your Bitcoin address has been set to: **${address}**`
+                )]
+            });
+            break;
+            
+        case 'bank':
+            const accountName = options.getString('name');
+            const accountNumber = options.getString('number');
+            const bankName = options.getString('bank');
+            
+            // Validate account number
+            if (!/^\d+$/.test(accountNumber)) {
+                return interaction.reply({ 
+                    content: '❌ Account number should contain only numbers!',
+                    ephemeral: true 
+                });
+            }
+            
+            db.setPaymentMethod(user.id, 'bank', `${accountName}|${accountNumber}|${bankName}`);
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.success(
+                    'Bank Details Saved',
+                    '✅ Your bank details have been saved:',
+                    [
+                        { name: 'Account Name', value: accountName, inline: true },
+                        { name: 'Account Number', value: accountNumber, inline: true },
+                        { name: 'Bank', value: bankName, inline: true }
+                    ]
+                )]
+            });
+            break;
+            
+        case 'help':
+            const helpEmbed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle('📚 CardVault Bot Commands')
+                .setDescription('All commands are slash commands! Just type `/` and browse.')
+                .addFields(
+                    { name: '🚀 **Getting Started**', value: 
+                        '`/register` - Create account\n' +
+                        '`/start` - Open DM to sell\n' +
+                        '`/profile` - View your profile', 
+                        inline: false },
+                    { name: '💳 **Payment Methods**', value: 
+                        '`/paypal` - Set PayPal\n' +
+                        '`/btc` - Set Bitcoin\n' +
+                        '`/bank` - Set Bank details', 
+                        inline: false },
+                    { name: '📊 **Server Info**', value: 
+                        '`/members` - Member stats\n' +
+                        '`/users` - List humans\n' +
+                        '`/bots` - List bots\n' +
+                        '`/leaderboard` - Top sellers', 
+                        inline: false },
+                    { name: '❓ **Other**', value: 
+                        '`/help` - This menu\n' +
+                        '`/ping` - Check latency', 
+                        inline: false }
+                )
+                .setFooter({ text: 'CardVault Gift Card Buyer' })
+                .setTimestamp();
+            
+            if (isAdmin) {
+                helpEmbed.addFields({ 
+                    name: '👑 **Admin Commands**', 
+                    value: 
+                        '`/pending` - View pending\n' +
+                        '`/approve` - Approve card\n' +
+                        '`/reject` - Reject card\n' +
+                        '`/paid` - Mark as paid\n' +
+                        '`/transaction` - View details\n' +
+                        '`/logs` - View activity logs\n' +
+                        '`/announce` - Broadcast message', 
+                    inline: false 
+                });
+            }
+            
+            await interaction.reply({ embeds: [helpEmbed] });
+            break;
+            
+        case 'members':
+            const members = interaction.guild.members.cache;
+            const total = members.size;
+            const humans = members.filter(m => !m.user.bot).size;
+            const bots = members.filter(m => m.user.bot).size;
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.info(
+                    `👥 Server Members - ${interaction.guild.name}`,
+                    '',
+                    [
+                        { name: 'Total Members', value: `${total}`, inline: true },
+                        { name: 'Humans', value: `${humans}`, inline: true },
+                        { name: 'Bots', value: `${bots}`, inline: true }
+                    ]
+                )]
+            });
+            break;
+            
+        case 'users':
+            const humanList = interaction.guild.members.cache
+                .filter(m => !m.user.bot && m.user.id !== client.user.id)
+                .map(m => m.user.username)
+                .slice(0, 20)
+                .join('\n');
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.info(
+                    '👤 Human Members',
+                    humanList || 'No humans found'
+                )]
+            });
+            break;
+            
+        case 'bots':
+            const botList = interaction.guild.members.cache
+                .filter(m => m.user.bot)
+                .map(m => m.user.username)
+                .slice(0, 20)
+                .join('\n');
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.info(
+                    '🤖 Bots in Server',
+                    botList || 'No bots found'
+                )]
+            });
+            break;
+            
+        case 'leaderboard':
+            const topSellers = db.getTopSellers(10);
+            
+            if (topSellers.length === 0) {
+                return interaction.reply('📊 No sellers yet! Be the first!');
+            }
+            
+            let leaderboardText = '';
+            for (let i = 0; i < topSellers.length; i++) {
+                const seller = topSellers[i];
+                try {
+                    const userObj = await client.users.fetch(seller.userId);
+                    leaderboardText += `${i + 1}. **${userObj.username}** - ${seller.totalSold} cards ($${seller.totalEarned})\n`;
+                } catch {
+                    leaderboardText += `${i + 1}. Unknown User - ${seller.totalSold} cards ($${seller.totalEarned})\n`;
+                }
+            }
+            
+            await interaction.reply({
+                embeds: [EmbedHelper.info(
+                    '🏆 Top Sellers',
+                    leaderboardText
+                )]
+            });
+            break;
+            
+        // ===== ADMIN COMMANDS =====
+        
+        case 'pending':
+            const pending = db.getPendingTransactions();
+            
+            if (pending.length === 0) {
+                return interaction.reply('✅ No pending transactions!');
+            }
+            
+            const pendingEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle(`⏳ Pending Transactions (${pending.length})`)
+                .setTimestamp();
+            
+            pending.slice(0, 10).forEach(tx => {
+                const date = new Date(tx.submittedAt).toLocaleString();
+                pendingEmbed.addFields({
+                    name: `${tx.txId} - ${tx.username}`,
+                    value: `${tx.brand} - $${tx.value} | ${date}`,
+                    inline: false
+                });
+            });
+            
+            if (pending.length > 10) {
+                pendingEmbed.setFooter({ text: `...and ${pending.length - 10} more` });
+            }
+            
+            await interaction.reply({ embeds: [pendingEmbed] });
+            break;
+            
+        case 'transaction':
+            const txId = options.getString('id');
+            const tx = db.getTransaction(txId);
+            
+            if (!tx) {
+                return interaction.reply({ 
+                    content: '❌ Transaction not found!',
+                    ephemeral: true 
+                });
+            }
+            
+            const txEmbed = new EmbedBuilder()
+                .setColor(0x0099FF)
+                .setTitle(`📋 Transaction: ${tx.txId}`)
+                .addFields(
+                    { name: '👤 User', value: tx.username, inline: true },
+                    { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
+                    { name: '💳 Payment', value: tx.paymentMethod, inline: true },
+                    { name: '📊 Status', value: tx.status, inline: true },
+                    { name: '📅 Submitted', value: new Date(tx.submittedAt).toLocaleString(), inline: true }
+                )
+                .setImage(tx.image)
+                .setTimestamp();
+            
+            await interaction.reply({ embeds: [txEmbed] });
+            break;
+            
+        case 'approve':
+            const approveId = options.getString('id');
+            const amount = options.getInteger('amount');
+            
+            const approveTx = db.getTransaction(approveId);
+            if (!approveTx) {
+                return interaction.reply({ 
+                    content: '❌ Transaction not found!',
+                    ephemeral: true 
+                });
+            }
+            
+            if (approveTx.status !== 'pending') {
+                return interaction.reply({ 
+                    content: `❌ This transaction is already ${approveTx.status}`,
+                    ephemeral: true 
+                });
+            }
+            
+            db.updateTransactionStatus(approveId, 'approved');
+            
+            try {
+                const userObj = await client.users.fetch(approveTx.userId);
+                if (userObj) {
+                    await userObj.send({
+                        embeds: [EmbedHelper.success(
+                            'Card Approved!',
+                            `Your card has been approved.`,
+                            [
+                                { name: 'Transaction', value: approveId, inline: true },
+                                { name: 'Offer', value: `$${amount}`, inline: true }
+                            ]
+                        )]
+                    });
+                }
+            } catch (error) {
+                console.log('Could not DM user');
+            }
+            
+            await interaction.reply(`✅ Transaction ${approveId} approved for $${amount}`);
+            break;
+            
+        case 'reject':
+            const rejectId = options.getString('id');
+            const reason = options.getString('reason') || 'No reason provided';
+            
+            const rejectTx = db.getTransaction(rejectId);
+            if (!rejectTx) {
+                return interaction.reply({ 
+                    content: '❌ Transaction not found!',
+                    ephemeral: true 
+                });
+            }
+            
+            if (rejectTx.status !== 'pending') {
+                return interaction.reply({ 
+                    content: `❌ This transaction is already ${rejectTx.status}`,
+                    ephemeral: true 
+                });
+            }
+            
+            db.updateTransactionStatus(rejectId, 'rejected', reason);
+            
+            try {
+                const userObj = await client.users.fetch(rejectTx.userId);
+                if (userObj) {
+                    await userObj.send({
+                        embeds: [EmbedHelper.error(
+                            'Card Rejected',
+                            `Your card was rejected.`,
+                            [
+                                { name: 'Transaction', value: rejectId, inline: true },
+                                { name: 'Reason', value: reason, inline: false }
+                            ]
+                        )]
+                    });
+                }
+            } catch (error) {
+                console.log('Could not DM user');
+            }
+            
+            await interaction.reply(`✅ Transaction ${rejectId} rejected.`);
+            break;
+            
+        case 'paid':
+            const paidId = options.getString('id');
+            
+            const paidTx = db.getTransaction(paidId);
+            if (!paidTx) {
+                return interaction.reply({ 
+                    content: '❌ Transaction not found!',
+                    ephemeral: true 
+                });
+            }
+            
+            if (paidTx.status !== 'approved') {
+                return interaction.reply({ 
+                    content: `❌ This transaction is ${paidTx.status}. It needs to be approved first.`,
+                    ephemeral: true 
+                });
+            }
+            
+            db.updateTransactionStatus(paidId, 'paid');
+            db.incrementUserStats(paidTx.userId, paidTx.value);
+            
+            try {
+                const userObj = await client.users.fetch(paidTx.userId);
+                if (userObj) {
+                    await userObj.send({
+                        embeds: [EmbedHelper.success(
+                            '💰 Payment Sent!',
+                            `Your payment has been processed.`,
+                            [
+                                { name: 'Transaction', value: paidId, inline: true },
+                                { name: 'Amount', value: `$${paidTx.value}`, inline: true }
+                            ]
+                        )]
+                    });
+                }
+            } catch (error) {
+                console.log('Could not DM user');
+            }
+            
+            await interaction.reply(`✅ Payment for ${paidId} marked as sent.`);
+            break;
+            
+        case 'logs':
+            const limit = options.getInteger('limit') || 20;
+            const logs = db.getRecentLogs(limit);
+            
+            const logsEmbed = new EmbedBuilder()
+                .setColor(0x808080)
+                .setTitle(`📋 Recent Logs (${logs.length})`)
+                .setTimestamp();
+            
+            let logText = '';
+            logs.slice(0, 15).forEach(log => {
+                const date = new Date(log.timestamp).toLocaleString();
+                logText += `[${date}] ${log.action} | ${log.userId} | ${log.details}\n`;
+            });
+            
+            if (logText.length > 2000) {
+                logText = logText.substring(0, 1900) + '...';
+            }
+            
+            logsEmbed.setDescription('```\n' + logText + '\n```');
+            
+            await interaction.reply({ embeds: [logsEmbed] });
+            break;
+            
+        case 'announce':
+            const announcement = options.getString('message');
+            
+            await interaction.reply({
+                content: '📢 Sending announcement to all users...',
+                ephemeral: true
+            });
+            
+            const allUsers = db.db.prepare('SELECT userId FROM users').all();
+            let sentCount = 0;
+            
+            for (const u of allUsers) {
+                try {
+                    const userObj = await client.users.fetch(u.userId);
+                    await userObj.send({
+                        embeds: [EmbedHelper.info(
+                            '📢 Announcement',
+                            announcement
+                        )]
+                    });
+                    sentCount++;
+                    // Small delay to avoid rate limits
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                } catch (error) {
+                    console.log(`Could not DM user ${u.userId}`);
+                }
+            }
+            
+            await interaction.followUp({
+                content: `✅ Announcement sent to ${sentCount} users.`,
+                ephemeral: true
+            });
+            break;
     }
 }
 
 // ============================================
-// MAIN MESSAGE HANDLER
+// BUTTON HANDLER (Selling Flow)
+// ============================================
+
+async function handleButton(interaction) {
+    const { user, customId } = interaction;
+    
+    // Check if user is banned
+    const userData = db.getUser(user.id);
+    if (userData?.isBanned) {
+        return interaction.reply({ 
+            content: '❌ You are banned from using CardVault.',
+            ephemeral: true 
+        });
+    }
+    
+    // Check if registered
+    if (!userData || !userData.registered) {
+        return interaction.reply({ 
+            content: '❌ You need to register first! Use `/register` in the server.',
+            ephemeral: true 
+        });
+    }
+    
+    // Handle sell buttons
+    if (customId.startsWith('sell_')) {
+        const method = customId.replace('sell_', '');
+        
+        // Check if payment method is set
+        if (method === 'paypal' && !userData.paypal) {
+            return interaction.reply({ 
+                content: '❌ You need to set your PayPal email first! Use `/paypal` in the server.',
+                ephemeral: true 
+            });
+        }
+        if (method === 'bitcoin' && !userData.btc) {
+            return interaction.reply({ 
+                content: '❌ You need to set your Bitcoin address first! Use `/btc` in the server.',
+                ephemeral: true 
+            });
+        }
+        if (method === 'bank' && !userData.bankName) {
+            return interaction.reply({ 
+                content: '❌ You need to set your bank details first! Use `/bank` in the server.',
+                ephemeral: true 
+            });
+        }
+        
+        // Create session
+        let session = sessions.get(user.id);
+        if (session) sessions.delete(user.id);
+        
+        session = sessions.create(user.id);
+        session.data.paymentMethod = method;
+        
+        // Store payment detail
+        if (method === 'paypal') session.data.paymentDetail = userData.paypal;
+        if (method === 'bitcoin') session.data.paymentDetail = userData.btc;
+        if (method === 'bank') {
+            session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
+        }
+        
+        // Get card brands for select menu
+        const brands = db.getCardBrands();
+        
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('select_brand')
+            .setPlaceholder('Choose a card brand')
+            .addOptions(
+                brands.slice(0, 25).map(brand => 
+                    new StringSelectMenuOptionBuilder()
+                        .setLabel(brand)
+                        .setValue(brand)
+                )
+            );
+        
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+        
+        await interaction.update({
+            content: '**Select your card brand:**',
+            components: [row]
+        });
+    }
+    
+    // Log button interaction
+    await logToChannel(
+        interaction.guild,
+        'Button Click',
+        user,
+        `Button: ${customId}`
+    );
+}
+
+// ============================================
+// SELECT MENU HANDLER
+// ============================================
+
+async function handleSelectMenu(interaction) {
+    const { user, values } = interaction;
+    
+    if (interaction.customId === 'select_brand') {
+        const brand = values[0];
+        const session = sessions.get(user.id);
+        
+        if (!session) {
+            return interaction.reply({ 
+                content: '❌ Session expired. Please use `/start` again.',
+                ephemeral: true 
+            });
+        }
+        
+        session.data.brand = brand;
+        sessions.update(user.id, { step: 2 });
+        
+        // Create modal for card value
+        const modal = new ModalBuilder()
+            .setCustomId('modal_value')
+            .setTitle('Enter Card Value');
+        
+        const valueInput = new TextInputBuilder()
+            .setCustomId('card_value')
+            .setLabel('Card Value in USD')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g., 25, 50, 100')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(4);
+        
+        const row = new ActionRowBuilder().addComponents(valueInput);
+        modal.addComponents(row);
+        
+        await interaction.showModal(modal);
+    }
+}
+
+// ============================================
+// MODAL SUBMIT HANDLER
+// ============================================
+
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isModalSubmit()) return;
+    
+    if (interaction.customId === 'modal_value') {
+        const value = parseInt(interaction.fields.getTextInputValue('card_value'));
+        const user = interaction.user;
+        const session = sessions.get(user.id);
+        
+        if (!session) {
+            return interaction.reply({ 
+                content: '❌ Session expired. Please use `/start` again.',
+                ephemeral: true 
+            });
+        }
+        
+        if (isNaN(value) || value <= 0) {
+            return interaction.reply({ 
+                content: '❌ Please enter a valid number.',
+                ephemeral: true 
+            });
+        }
+        
+        session.data.value = value;
+        sessions.update(user.id, { step: 3 });
+        
+        await interaction.reply({
+            content: '**Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\nJust drag and drop your image here.',
+            ephemeral: false
+        });
+    }
+});
+
+// ============================================
+// DM MESSAGE HANDLER (For Image Uploads)
 // ============================================
 
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages
+    // Ignore bot messages and server messages
     if (message.author.bot) return;
-
-    // Handle DMs
-    if (message.guild === null) {
-        await handleDM(message);
-        return;
-    }
-
-    // Handle server commands - check prefix
-    if (!message.content.startsWith(CONFIG.PREFIX)) return;
-
-    // Parse command
-    const args = message.content.slice(CONFIG.PREFIX.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-    const isAdmin = message.author.id === CONFIG.ADMIN_ID;
-
-    // ===== BASIC COMMANDS =====
+    if (message.guild !== null) return;
     
-    if (command === 'ping') {
-        return message.reply({
-            embeds: [EmbedHelper.success(
-                'Pong! 🏓',
-                `Bot latency: ${Date.now() - message.createdTimestamp}ms`
-            )]
-        });
-    }
-
-    // ===== START/HELLO COMMANDS - Open DM channel =====
-    if (command === 'start' || command === 'hello') {
-        try {
-            await message.author.send('👋 **Welcome to CardVault!**\n\nDM me **sell** to start selling your gift cards.\n\nNeed help? Type `!help` in the server.');
-            message.reply('✅ **DM opened!** Check your DMs and type **sell** to begin.');
-            console.log(`[START] Opened DM for ${message.author.tag}`);
-        } catch (error) {
-            message.reply('❌ Could not DM you. Please enable DMs from server members and try again.');
-        }
-        return;
-    }
-
-    if (command === 'help') {
-        const helpEmbed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle('📚 CardVault Bot Commands')
-            .addFields(
-                { name: '🚀 **GET STARTED**', value: 
-                    `\`${CONFIG.PREFIX}start\` or \`${CONFIG.PREFIX}hello\` - Opens DM so you can sell`, 
-                    inline: false },
-                { name: '📝 **Registration**', value: 
-                    `\`${CONFIG.PREFIX}register\` - Create seller account`, 
-                    inline: false },
-                { name: '💳 **Payment Methods**', value: 
-                    `\`${CONFIG.PREFIX}paypal email\` - Set PayPal\n` +
-                    `\`${CONFIG.PREFIX}btc address\` - Set Bitcoin\n` +
-                    `\`${CONFIG.PREFIX}bank "Full Name" 0123456789 Bank\` - Set Bank (use quotes!)`, 
-                    inline: false },
-                { name: '👤 **Profile**', value: 
-                    `\`${CONFIG.PREFIX}profile\` - View your profile`, 
-                    inline: false },
-                { name: '📊 **Server Info**', value: 
-                    `\`${CONFIG.PREFIX}members\` - Member count\n` +
-                    `\`${CONFIG.PREFIX}users\` - List humans\n` +
-                    `\`${CONFIG.PREFIX}bots\` - List bots`, 
-                    inline: false },
-                { name: '💬 **How to Sell**', value: 
-                    `1. Type \`${CONFIG.PREFIX}start\` in server\n` +
-                    `2. Check your DM\n` +
-                    `3. Type **sell** in DM\n` +
-                    `4. Follow the prompts`, 
-                    inline: false }
-            )
-            .setFooter({ text: 'CardVault Gift Card Buyer' })
-            .setTimestamp();
-        
-        return message.reply({ embeds: [helpEmbed] });
-    }
-
-    // ===== USER COMMANDS =====
+    const userId = message.author.id;
+    const session = sessions.get(userId);
     
-    if (command === 'register') {
-        const user = db.createUser(message.author.id);
-        
-        return message.reply({
-            embeds: [EmbedHelper.success(
-                '✅ Registration Successful!',
-                'You can now sell gift cards!',
-                [
-                    { name: '📍 Next Step', value: `Type \`${CONFIG.PREFIX}start\` to open DM and begin selling`, inline: false },
-                    { name: '💳 Set Payment Method', value: 
-                        `\`${CONFIG.PREFIX}paypal email\`\n` +
-                        `\`${CONFIG.PREFIX}btc address\`\n` +
-                        `\`${CONFIG.PREFIX}bank "Full Name" 0123456789 Bank\``, inline: false }
-                ]
-            )]
-        });
-    }
-
-    if (command === 'paypal') {
-        const email = args[0];
-        if (!email || !email.includes('@')) {
-            return message.reply(`❌ Please provide a valid email. Example: \`${CONFIG.PREFIX}paypal email@example.com\``);
-        }
-        
-        db.setPaymentMethod(message.author.id, 'paypal', email);
-        
-        return message.reply({
-            embeds: [EmbedHelper.success(
-                'PayPal Email Set',
-                `✅ Your PayPal email has been set to: **${email}**`
-            )]
-        });
-    }
-
-    if (command === 'btc') {
-        const address = args[0];
-        if (!address || address.length < 10) {
-            return message.reply(`❌ Please provide a valid Bitcoin address. Example: \`${CONFIG.PREFIX}btc 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\``);
-        }
-        
-        db.setPaymentMethod(message.author.id, 'btc', address);
-        
-        return message.reply({
-            embeds: [EmbedHelper.success(
-                'Bitcoin Address Set',
-                `✅ Your Bitcoin address has been set to: **${address}**`
-            )]
-        });
-    }
-
-    // ===== FIXED BANK COMMAND =====
-    if (command === 'bank') {
-        // Better regex to extract quoted strings and remaining args
-        const quoteRegex = /"([^"]*)"/g;
-        const quotedMatches = [...message.content.matchAll(quoteRegex)];
-        
-        let accountName, accountNumber, bankName;
-        
-        if (quotedMatches.length >= 1) {
-            // First quoted string is account name
-            accountName = quotedMatches[0][1].trim();
-            
-            // Get the rest of the args (after the quoted parts)
-            const remainingArgs = message.content
-                .replace(/"([^"]*)"/g, '') // Remove quoted parts
-                .split(/\s+/) // Split by spaces
-                .filter(arg => arg && !arg.startsWith(CONFIG.PREFIX)); // Remove empty and prefix
-            
-            // First remaining arg is account number
-            accountNumber = remainingArgs[0];
-            
-            // Everything else is bank name
-            bankName = remainingArgs.slice(1).join(' ').trim();
-        } else {
-            // Fallback for no quotes (old format)
-            accountName = args[0]?.replace(/"/g, '');
-            accountNumber = args[1];
-            bankName = args.slice(2).join(' ');
-        }
-        
-        // Validation
-        if (!accountName || !accountNumber || !bankName) {
-            return message.reply(
-                `❌ Usage: \`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 Bank Name\`\n` +
-                `Example: \`${CONFIG.PREFIX}bank "Ifada Rayner" 8021141940 OPay\`\n` +
-                `⚠️ Make sure to use quotes around your name!`
-            );
-        }
-        
-        // Validate account number (basic check)
-        if (!/^\d+$/.test(accountNumber)) {
-            return message.reply('❌ Account number should contain only numbers!');
-        }
-        
-        // Save to database
-        db.setPaymentMethod(message.author.id, 'bank', `${accountName}|${accountNumber}|${bankName}`);
-        
-        return message.reply({
-            embeds: [EmbedHelper.success(
-                'Bank Details Saved',
-                '✅ Your bank details have been saved:',
-                [
-                    { name: 'Account Name', value: accountName, inline: true },
-                    { name: 'Account Number', value: accountNumber, inline: true },
-                    { name: 'Bank', value: bankName, inline: true }
-                ]
-            )]
-        });
-    }
-
-    if (command === 'profile') {
-        const target = message.mentions.users.first() || message.author;
-        const userData = db.getUser(target.id);
-        
-        if (!userData) {
-            return message.reply(`❌ ${target.username} is not registered.`);
-        }
-        
-        const transactions = db.getUserTransactions(target.id);
-        const recentTx = transactions.length > 0 ? transactions[0] : null;
-        
-        const profileEmbed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle(`👤 ${target.username}'s Profile`)
-            .addFields(
-                { name: '💳 PayPal', value: userData.paypal || '❌ Not set', inline: false },
-                { name: '₿ Bitcoin', value: userData.btc || '❌ Not set', inline: false },
-                { name: '🏦 Bank Transfer', value: userData.bankName ? 
-                    `${userData.bankName}\n${userData.bankNumber}\n${userData.bankAccount}` : 
-                    '❌ Not set', inline: false },
-                { name: '💰 Cards Sold', value: `${userData.totalSold || 0}`, inline: true },
-                { name: '💵 Total Earned', value: `$${userData.totalEarned || 0}`, inline: true }
-            )
-            .setTimestamp();
-        
-        if (recentTx) {
-            profileEmbed.addFields({ 
-                name: '📋 Last Transaction', 
-                value: `${recentTx.brand} - $${recentTx.value} (${recentTx.status})`, 
-                inline: false 
-            });
-        }
-        
-        return message.reply({ embeds: [profileEmbed] });
-    }
-
-    if (command === 'members') {
-        const members = message.guild.members.cache;
-        const total = members.size;
-        const humans = members.filter(m => !m.user.bot).size;
-        const bots = members.filter(m => m.user.bot).size;
-        
-        return message.reply({
-            embeds: [EmbedHelper.info(
-                `👥 Server Members - ${message.guild.name}`,
-                '',
-                [
-                    { name: 'Total Members', value: `${total}`, inline: true },
-                    { name: 'Humans', value: `${humans}`, inline: true },
-                    { name: 'Bots', value: `${bots}`, inline: true }
-                ]
-            )]
-        });
-    }
-
-    if (command === 'users') {
-        const members = message.guild.members.cache
-            .filter(m => !m.user.bot && m.user.id !== client.user.id)
-            .map(m => m.user.username)
-            .slice(0, 20)
-            .join('\n');
-        
-        return message.reply({
-            embeds: [EmbedHelper.info(
-                '👤 Human Members',
-                members || 'No humans found'
-            )]
-        });
-    }
-
-    if (command === 'bots') {
-        const bots = message.guild.members.cache
-            .filter(m => m.user.bot)
-            .map(m => m.user.username)
-            .slice(0, 20)
-            .join('\n');
-        
-        return message.reply({
-            embeds: [EmbedHelper.info(
-                '🤖 Bots in Server',
-                bots || 'No bots found'
-            )]
-        });
-    }
-
-    // ===== ADMIN COMMANDS =====
+    if (!session || session.step !== 3) return;
     
-    if (!isAdmin) {
-        // Not admin, ignore admin commands
-        if (['pending', 'approve', 'reject', 'paid', 'transaction'].includes(command)) {
-            return;
-        }
-        return;
+    // Check if message has image
+    if (message.attachments.size === 0) {
+        return message.reply('❌ Please upload an image of the card.');
     }
-
-    if (command === 'pending') {
-        const pending = db.getPendingTransactions();
-        
-        if (pending.length === 0) {
-            return message.reply('✅ No pending transactions!');
-        }
-        
-        const embed = new EmbedBuilder()
-            .setColor(0xFFA500)
-            .setTitle(`⏳ Pending Transactions (${pending.length})`)
-            .setTimestamp();
-        
-        pending.slice(0, 10).forEach(tx => {
-            const date = new Date(tx.submittedAt).toLocaleString();
-            embed.addFields({
-                name: `${tx.txId} - ${tx.username}`,
-                value: `${tx.brand} - $${tx.value} | ${date}`,
-                inline: false
-            });
-        });
-        
-        if (pending.length > 10) {
-            embed.setFooter({ text: `...and ${pending.length - 10} more` });
-        }
-        
-        return message.reply({ embeds: [embed] });
+    
+    const image = message.attachments.first();
+    
+    // Check if it's an image
+    if (!image.contentType?.startsWith('image/')) {
+        return message.reply('❌ Please upload a valid image file.');
     }
-
-    if (command === 'transaction') {
-        const txId = args[0];
-        if (!txId) return message.reply('❌ Usage: `!transaction TX-ID`');
-        
-        const tx = db.getTransaction(txId);
-        if (!tx) return message.reply('❌ Transaction not found!');
-        
-        const embed = new EmbedBuilder()
-            .setColor(0x0099FF)
-            .setTitle(`📋 Transaction: ${tx.txId}`)
-            .addFields(
-                { name: '👤 User', value: tx.username, inline: true },
-                { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
-                { name: '💳 Payment', value: tx.paymentMethod, inline: true },
-                { name: '📊 Status', value: tx.status, inline: true },
-                { name: '📅 Submitted', value: new Date(tx.submittedAt).toLocaleString(), inline: true }
-            )
-            .setImage(tx.image)
-            .setTimestamp();
-        
-        return message.reply({ embeds: [embed] });
-    }
-
-    if (command === 'approve') {
-        const txId = args[0];
-        const amount = parseInt(args[1]);
-        
-        if (!txId || !amount) {
-            return message.reply('❌ Usage: `!approve TX-ID AMOUNT`');
+    
+    // Create transaction
+    const txId = db.createTransaction({
+        userId,
+        username: message.author.username,
+        paymentMethod: session.data.paymentMethod,
+        paymentDetail: session.data.paymentDetail,
+        brand: session.data.brand,
+        value: session.data.value,
+        image: image.url
+    });
+    
+    // Notify admin channel in all guilds
+    client.guilds.cache.forEach(async (guild) => {
+        const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
+        if (adminChannel) {
+            const adminEmbed = new EmbedBuilder()
+                .setColor(0xFFA500)
+                .setTitle('🆕 New Gift Card Submission')
+                .addFields(
+                    { name: '🆔 Transaction', value: txId, inline: true },
+                    { name: '👤 User', value: message.author.username, inline: true },
+                    { name: '💳 Payment', value: session.data.paymentMethod, inline: true },
+                    { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true }
+                )
+                .setImage(image.url)
+                .setFooter({ text: `User ID: ${userId}` })
+                .setTimestamp();
+            
+            await adminChannel.send({ embeds: [adminEmbed] });
+            await adminChannel.send(`<@${CONFIG.ADMIN_ID}> New card ready for review!`);
         }
-        
-        const tx = db.getTransaction(txId);
-        if (!tx) return message.reply('❌ Transaction not found!');
-        if (tx.status !== 'pending') return message.reply(`❌ This transaction is already ${tx.status}`);
-        
-        db.updateTransactionStatus(txId, 'approved');
-        
-        try {
-            const user = await client.users.fetch(tx.userId);
-            if (user) {
-                await user.send({
-                    embeds: [EmbedHelper.success(
-                        'Card Approved!',
-                        `Your card has been approved.`,
-                        [
-                            { name: 'Transaction', value: txId, inline: true },
-                            { name: 'Offer', value: `$${amount}`, inline: true }
-                        ]
-                    )]
-                });
-            }
-        } catch (error) {
-            console.log('Could not DM user');
-        }
-        
-        return message.reply(`✅ Transaction ${txId} approved for $${amount}`);
-    }
-
-    if (command === 'reject') {
-        const txId = args[0];
-        const reason = args.slice(1).join(' ') || 'No reason provided';
-        
-        if (!txId) return message.reply('❌ Usage: `!reject TX-ID REASON`');
-        
-        const tx = db.getTransaction(txId);
-        if (!tx) return message.reply('❌ Transaction not found!');
-        if (tx.status !== 'pending') return message.reply(`❌ This transaction is already ${tx.status}`);
-        
-        db.updateTransactionStatus(txId, 'rejected', reason);
-        
-        try {
-            const user = await client.users.fetch(tx.userId);
-            if (user) {
-                await user.send({
-                    embeds: [EmbedHelper.error(
-                        'Card Rejected',
-                        `Your card was rejected.`,
-                        [
-                            { name: 'Transaction', value: txId, inline: true },
-                            { name: 'Reason', value: reason, inline: false }
-                        ]
-                    )]
-                });
-            }
-        } catch (error) {
-            console.log('Could not DM user');
-        }
-        
-        return message.reply(`✅ Transaction ${txId} rejected.`);
-    }
-
-    if (command === 'paid') {
-        const txId = args[0];
-        if (!txId) return message.reply('❌ Usage: `!paid TX-ID`');
-        
-        const tx = db.getTransaction(txId);
-        if (!tx) return message.reply('❌ Transaction not found!');
-        if (tx.status !== 'approved') return message.reply(`❌ This transaction is ${tx.status}. It needs to be approved first.`);
-        
-        db.updateTransactionStatus(txId, 'paid');
-        db.incrementUserStats(tx.userId, tx.value);
-        
-        try {
-            const user = await client.users.fetch(tx.userId);
-            if (user) {
-                await user.send({
-                    embeds: [EmbedHelper.success(
-                        '💰 Payment Sent!',
-                        `Your payment has been processed.`,
-                        [
-                            { name: 'Transaction', value: txId, inline: true },
-                            { name: 'Amount', value: `$${tx.value}`, inline: true }
-                        ]
-                    )]
-                });
-            }
-        } catch (error) {
-            console.log('Could not DM user');
-        }
-        
-        return message.reply(`✅ Payment for ${txId} marked as sent.`);
-    }
+    });
+    
+    // Clear session
+    sessions.delete(userId);
+    
+    // Send confirmation to user
+    await message.reply({
+        embeds: [EmbedHelper.success(
+            '✅ Card Submitted Successfully!',
+            `Your transaction ID: **${txId}**`,
+            [
+                { name: 'Card', value: `${session.data.brand} - $${session.data.value}`, inline: true },
+                { name: 'Status', value: '⏳ Pending Review', inline: true }
+            ]
+        ).setDescription('An admin will review your card shortly. You will be notified when approved.')]
+    });
+    
+    // Log
+    db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
 });
 
 // ============================================
