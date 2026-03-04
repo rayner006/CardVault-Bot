@@ -25,12 +25,10 @@ const {
     StringSelectMenuOptionBuilder,
     ModalBuilder,
     TextInputBuilder,
-    TextInputStyle,
-    InteractionType
+    TextInputStyle
 } = require('discord.js');
 const Database = require('better-sqlite3');
 const express = require('express');
-const fs = require('fs');
 
 // ============================================
 // CONFIGURATION & INITIALIZATION
@@ -58,7 +56,7 @@ app.listen(PORT, () => {
 const CONFIG = {
     TOKEN: process.env.DISCORD_TOKEN,
     CLIENT_ID: process.env.CLIENT_ID,
-    GUILD_ID: process.env.GUILD_ID, // For testing - remove for global commands
+    GUILD_ID: process.env.GUILD_ID,
     ADMIN_ID: process.env.ADMIN_ID,
     SUPPORT_ID: process.env.SUPPORT_ID || '1478007761697509531',
     LOG_CHANNEL: 'cardvault-logs'
@@ -160,7 +158,7 @@ class DatabaseManager {
             )
         `);
 
-        // ===== UPDATED: Insert YOUR card brands with Razor Gold =====
+        // Insert YOUR card brands with Razor Gold
         const brands = [
             'Amazon',
             'Steam',
@@ -342,7 +340,6 @@ class DatabaseManager {
     log(action, userId, details) {
         console.log(`[LOG] ${new Date().toLocaleTimeString()} | ${action} | ${userId} | ${details}`);
         
-        // Also save to database
         const stmt = this.db.prepare(`
             INSERT INTO logs (action, userId, details, timestamp)
             VALUES (?, ?, ?, ?)
@@ -370,7 +367,7 @@ const db = new DatabaseManager();
 class SessionManager {
     constructor() {
         this.sessions = new Collection();
-        this.timeout = 30 * 60 * 1000; // 30 minutes
+        this.timeout = 30 * 60 * 1000;
     }
 
     create(userId) {
@@ -388,7 +385,6 @@ class SessionManager {
     get(userId) {
         const session = this.sessions.get(userId);
         
-        // Check if session expired
         if (session && (Date.now() - session.createdAt) > this.timeout) {
             this.sessions.delete(userId);
             return null;
@@ -495,7 +491,6 @@ async function logToChannel(guild, action, user, details) {
 // ============================================
 
 const commands = [
-    // User Commands
     {
         name: 'register',
         description: 'Create your seller account',
@@ -511,7 +506,7 @@ const commands = [
             {
                 name: 'user',
                 description: 'User to view profile (leave empty for yourself)',
-                type: 6, // USER type
+                type: 6,
                 required: false
             }
         ]
@@ -523,7 +518,7 @@ const commands = [
             {
                 name: 'email',
                 description: 'Your PayPal email address',
-                type: 3, // STRING type
+                type: 3,
                 required: true
             }
         ]
@@ -546,7 +541,7 @@ const commands = [
         options: [
             {
                 name: 'name',
-                description: 'Your full account name (use quotes if needed)',
+                description: 'Your full account name',
                 type: 3,
                 required: true
             },
@@ -588,12 +583,10 @@ const commands = [
         name: 'leaderboard',
         description: 'Show top sellers',
     },
-    
-    // Admin Commands
     {
         name: 'pending',
         description: 'Show all pending transactions (Admin only)',
-        default_member_permissions: '0' // Restrict to admins
+        default_member_permissions: '0'
     },
     {
         name: 'transaction',
@@ -621,7 +614,7 @@ const commands = [
             {
                 name: 'amount',
                 description: 'Amount to pay',
-                type: 4, // INTEGER type
+                type: 4,
                 required: true
             }
         ],
@@ -689,7 +682,6 @@ const commands = [
     }
 ];
 
-// Register slash commands
 const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
 
 (async () => {
@@ -697,14 +689,12 @@ const rest = new REST({ version: '10' }).setToken(CONFIG.TOKEN);
         console.log('[SLASH] Registering slash commands...');
         
         if (CONFIG.GUILD_ID) {
-            // Guild commands (instant, for testing)
             await rest.put(
                 Routes.applicationGuildCommands(CONFIG.CLIENT_ID, CONFIG.GUILD_ID),
                 { body: commands }
             );
             console.log(`[SLASH] Registered ${commands.length} commands for guild ${CONFIG.GUILD_ID}`);
         } else {
-            // Global commands (can take up to 1 hour to propagate)
             await rest.put(
                 Routes.applicationCommands(CONFIG.CLIENT_ID),
                 { body: commands }
@@ -732,14 +722,13 @@ client.once('ready', () => {
     console.log(`📝 Log Channel: #${CONFIG.LOG_CHANNEL}`);
     console.log('='.repeat(50) + '\n');
 
-    // Set bot status
     client.user.setActivity('/start | Begin selling', { 
         type: 'WATCHING' 
     });
 });
 
 // ============================================
-// WELCOME MESSAGE HANDLER - UPDATED WITH RAZOR GOLD
+// WELCOME MESSAGE HANDLER
 // ============================================
 
 client.on('guildMemberAdd', async (member) => {
@@ -800,10 +789,7 @@ client.on('guildMemberAdd', async (member) => {
             .setTimestamp();
 
         await member.send({ embeds: [welcomeEmbed] });
-        
-        // Log to channel
         await logToChannel(member.guild, 'New Member Joined', member.user, 'Welcome DM sent');
-        
         console.log(`[WELCOME] Message sent to ${member.user.tag}`);
     } catch (error) {
         console.log(`[WELCOME] Could not send DM to ${member.user.tag} - DMs closed`);
@@ -811,16 +797,15 @@ client.on('guildMemberAdd', async (member) => {
 });
 
 // ============================================
-// INTERACTION HANDLER (Slash Commands & Buttons)
+// MAIN INTERACTION HANDLER (Slash Commands, Buttons, Select Menus, Modals)
 // ============================================
 
 client.on('interactionCreate', async (interaction) => {
     try {
         // Handle slash commands
         if (interaction.isChatInputCommand()) {
-            // Check cooldown (except for admins)
             if (interaction.user.id !== CONFIG.ADMIN_ID) {
-                const cooldownTime = 3; // 3 seconds
+                const cooldownTime = 3;
                 const key = `${interaction.user.id}-${interaction.commandName}`;
                 
                 if (cooldowns.has(key)) {
@@ -833,11 +818,9 @@ client.on('interactionCreate', async (interaction) => {
                         });
                     }
                 }
-                
                 cooldowns.set(key, Date.now() + (cooldownTime * 1000));
             }
             
-            // Check if user is banned
             const userData = db.getUser(interaction.user.id);
             if (userData?.isBanned) {
                 return interaction.reply({ 
@@ -846,10 +829,7 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
             
-            // Handle each command
             await handleSlashCommand(interaction);
-            
-            // Log command usage
             await logToChannel(
                 interaction.guild,
                 'Command Used',
@@ -866,6 +846,37 @@ client.on('interactionCreate', async (interaction) => {
         // Handle select menu interactions
         else if (interaction.isStringSelectMenu()) {
             await handleSelectMenu(interaction);
+        }
+        
+        // Handle modal submissions
+        else if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'modal_value') {
+                const value = parseInt(interaction.fields.getTextInputValue('card_value'));
+                const user = interaction.user;
+                const session = sessions.get(user.id);
+                
+                if (!session) {
+                    return interaction.reply({ 
+                        content: '❌ Session expired. Please use `/start` again.',
+                        ephemeral: true 
+                    });
+                }
+                
+                if (isNaN(value) || value <= 0) {
+                    return interaction.reply({ 
+                        content: '❌ Please enter a valid number.',
+                        ephemeral: true 
+                    });
+                }
+                
+                session.data.value = value;
+                sessions.update(user.id, { step: 3 });
+                
+                await interaction.reply({
+                    content: '**Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\nJust drag and drop your image here.',
+                    ephemeral: false
+                });
+            }
         }
         
     } catch (error) {
@@ -886,9 +897,8 @@ client.on('interactionCreate', async (interaction) => {
 // ============================================
 
 async function handleSlashCommand(interaction) {
-    const { commandName, options, user, guild } = interaction;
+    const { commandName, options, user } = interaction;
     
-    // Check admin commands
     const isAdmin = user.id === CONFIG.ADMIN_ID;
     const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce'];
     
@@ -900,8 +910,6 @@ async function handleSlashCommand(interaction) {
     }
     
     switch (commandName) {
-        // ===== USER COMMANDS =====
-        
         case 'ping':
             await interaction.reply({
                 embeds: [EmbedHelper.success(
@@ -912,7 +920,7 @@ async function handleSlashCommand(interaction) {
             break;
             
         case 'register':
-            const userData = db.createUser(user.id);
+            db.createUser(user.id);
             await interaction.reply({
                 embeds: [EmbedHelper.success(
                     '✅ Registration Successful!',
@@ -930,7 +938,6 @@ async function handleSlashCommand(interaction) {
             
         case 'start':
             try {
-                // Check if registered
                 const registered = db.getUser(user.id);
                 if (!registered || !registered.registered) {
                     return interaction.reply({ 
@@ -939,9 +946,6 @@ async function handleSlashCommand(interaction) {
                     });
                 }
                 
-                await user.send('👋 **Welcome to CardVault!**\n\nClick the button below to start selling.');
-                
-                // Create payment method selection buttons
                 const row = new ActionRowBuilder()
                     .addComponents(
                         new ButtonBuilder()
@@ -962,7 +966,7 @@ async function handleSlashCommand(interaction) {
                     );
                 
                 await user.send({
-                    content: '**Choose your payment method:**',
+                    content: '👋 **Welcome to CardVault!**\n\nClick a button below to choose your payment method:',
                     components: [row]
                 });
                 
@@ -970,7 +974,9 @@ async function handleSlashCommand(interaction) {
                     content: '✅ **DM opened!** Check your DMs to start selling.',
                     ephemeral: true 
                 });
+                
             } catch (error) {
+                console.error('[START ERROR]', error);
                 await interaction.reply({ 
                     content: '❌ Could not DM you. Please enable DMs from server members.',
                     ephemeral: true 
@@ -1063,7 +1069,6 @@ async function handleSlashCommand(interaction) {
             const accountNumber = options.getString('number');
             const bankName = options.getString('bank');
             
-            // Validate account number
             if (!/^\d+$/.test(accountNumber)) {
                 return interaction.reply({ 
                     content: '❌ Account number should contain only numbers!',
@@ -1212,8 +1217,6 @@ async function handleSlashCommand(interaction) {
             });
             break;
             
-        // ===== ADMIN COMMANDS =====
-        
         case 'pending':
             const pending = db.getPendingTransactions();
             
@@ -1440,7 +1443,6 @@ async function handleSlashCommand(interaction) {
                         )]
                     });
                     sentCount++;
-                    // Small delay to avoid rate limits
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 } catch (error) {
                     console.log(`Could not DM user ${u.userId}`);
@@ -1456,13 +1458,12 @@ async function handleSlashCommand(interaction) {
 }
 
 // ============================================
-// BUTTON HANDLER (Selling Flow)
+// BUTTON HANDLER
 // ============================================
 
 async function handleButton(interaction) {
     const { user, customId } = interaction;
     
-    // Check if user is banned
     const userData = db.getUser(user.id);
     if (userData?.isBanned) {
         return interaction.reply({ 
@@ -1471,7 +1472,6 @@ async function handleButton(interaction) {
         });
     }
     
-    // Check if registered
     if (!userData || !userData.registered) {
         return interaction.reply({ 
             content: '❌ You need to register first! Use `/register` in the server.',
@@ -1479,11 +1479,9 @@ async function handleButton(interaction) {
         });
     }
     
-    // Handle sell buttons
     if (customId.startsWith('sell_')) {
         const method = customId.replace('sell_', '');
         
-        // Check if payment method is set
         if (method === 'paypal' && !userData.paypal) {
             return interaction.reply({ 
                 content: '❌ You need to set your PayPal email first! Use `/paypal` in the server.',
@@ -1503,21 +1501,18 @@ async function handleButton(interaction) {
             });
         }
         
-        // Create session
         let session = sessions.get(user.id);
         if (session) sessions.delete(user.id);
         
         session = sessions.create(user.id);
         session.data.paymentMethod = method;
         
-        // Store payment detail
         if (method === 'paypal') session.data.paymentDetail = userData.paypal;
         if (method === 'bitcoin') session.data.paymentDetail = userData.btc;
         if (method === 'bank') {
             session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
         }
         
-        // Get card brands for select menu (NOW WITH YOUR FULL LIST INCLUDING RAZOR GOLD)
         const brands = db.getCardBrands();
         
         const selectMenu = new StringSelectMenuBuilder()
@@ -1539,7 +1534,6 @@ async function handleButton(interaction) {
         });
     }
     
-    // Log button interaction
     await logToChannel(
         interaction.guild,
         'Button Click',
@@ -1569,7 +1563,6 @@ async function handleSelectMenu(interaction) {
         session.data.brand = brand;
         sessions.update(user.id, { step: 2 });
         
-        // Create modal for card value
         const modal = new ModalBuilder()
             .setCustomId('modal_value')
             .setTitle('Enter Card Value');
@@ -1591,47 +1584,10 @@ async function handleSelectMenu(interaction) {
 }
 
 // ============================================
-// MODAL SUBMIT HANDLER
-// ============================================
-
-client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isModalSubmit()) return;
-    
-    if (interaction.customId === 'modal_value') {
-        const value = parseInt(interaction.fields.getTextInputValue('card_value'));
-        const user = interaction.user;
-        const session = sessions.get(user.id);
-        
-        if (!session) {
-            return interaction.reply({ 
-                content: '❌ Session expired. Please use `/start` again.',
-                ephemeral: true 
-            });
-        }
-        
-        if (isNaN(value) || value <= 0) {
-            return interaction.reply({ 
-                content: '❌ Please enter a valid number.',
-                ephemeral: true 
-            });
-        }
-        
-        session.data.value = value;
-        sessions.update(user.id, { step: 3 });
-        
-        await interaction.reply({
-            content: '**Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\nJust drag and drop your image here.',
-            ephemeral: false
-        });
-    }
-});
-
-// ============================================
 // DM MESSAGE HANDLER (For Image Uploads)
 // ============================================
 
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages and server messages
     if (message.author.bot) return;
     if (message.guild !== null) return;
     
@@ -1640,19 +1596,16 @@ client.on('messageCreate', async (message) => {
     
     if (!session || session.step !== 3) return;
     
-    // Check if message has image
     if (message.attachments.size === 0) {
         return message.reply('❌ Please upload an image of the card.');
     }
     
     const image = message.attachments.first();
     
-    // Check if it's an image
     if (!image.contentType?.startsWith('image/')) {
         return message.reply('❌ Please upload a valid image file.');
     }
     
-    // Create transaction
     const txId = db.createTransaction({
         userId,
         username: message.author.username,
@@ -1663,7 +1616,6 @@ client.on('messageCreate', async (message) => {
         image: image.url
     });
     
-    // Notify admin channel in all guilds
     client.guilds.cache.forEach(async (guild) => {
         const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
         if (adminChannel) {
@@ -1685,10 +1637,8 @@ client.on('messageCreate', async (message) => {
         }
     });
     
-    // Clear session
     sessions.delete(userId);
     
-    // Send confirmation to user
     await message.reply({
         embeds: [EmbedHelper.success(
             '✅ Card Submitted Successfully!',
@@ -1700,7 +1650,6 @@ client.on('messageCreate', async (message) => {
         ).setDescription('An admin will review your card shortly. You will be notified when approved.')]
     });
     
-    // Log
     db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
 });
 
