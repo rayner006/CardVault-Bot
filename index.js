@@ -754,6 +754,11 @@ client.on('guildMemberAdd', async (member) => {
                     inline: false 
                 },
                 { 
+                    name: '📍 Where to Type Commands', 
+                    value: `All commands must be typed in **#👋-welcome** channel - that's the only channel where you can send messages!`, 
+                    inline: false 
+                },
+                { 
                     name: 'Step 3: 🚀 Start Selling', 
                     value: `Type \`/start\` in the server to open a DM, then follow the buttons`, 
                     inline: false 
@@ -872,7 +877,7 @@ client.on('interactionCreate', async (interaction) => {
                 session.data.value = value;
                 sessions.update(user.id, { step: 3 });
                 
-                // UPDATED: Mobile-friendly upload instructions
+                // Mobile-friendly upload instructions
                 await interaction.reply({
                     content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload',
                     ephemeral: false
@@ -927,11 +932,32 @@ async function handleSlashCommand(interaction) {
                     '✅ Registration Successful!',
                     'You can now sell gift cards!',
                     [
-                        { name: '📍 Next Step', value: `Use \`/start\` to open DM and begin selling`, inline: false },
-                        { name: '💳 Set Payment Method', value: 
-                            `\`/paypal email:your@email.com\`\n` +
-                            `\`/btc address:yourBitcoinAddress\`\n` +
-                            `\`/bank name:"Your Name" number:0123456789 bank:BankName\``, inline: false }
+                        { 
+                            name: '💳 **STEP 1: Set Payment Method**', 
+                            value: 
+                            'Choose ONE of these commands:\n' +
+                            '• `/paypal email:your@email.com`\n' +
+                            '• `/btc address:yourBitcoinAddress`\n' +
+                            '• `/bank name:"Your Name" number:0123456789 bank:BankName`', 
+                            inline: false 
+                        },
+                        { 
+                            name: '📝 **EXAMPLE:**', 
+                            value: '`/bank name:"Sarah Johnson" number:8123456789 bank:GTBank`', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🚀 **STEP 2: Start Selling**', 
+                            value: 
+                            '1. Enter `/start` in Welcome channel\n' +
+                            '2. Check your DMs\n' +
+                            '3. Follow the bot\'s instructions:\n' +
+                            '   • Click payment button\n' +
+                            '   • Select card brand\n' +
+                            '   • Enter value\n' +
+                            '   • Upload photo', 
+                            inline: false 
+                        }
                     ]
                 )]
             });
@@ -943,6 +969,14 @@ async function handleSlashCommand(interaction) {
                 if (!registered || !registered.registered) {
                     return interaction.reply({ 
                         content: '❌ You need to register first! Use `/register`',
+                        ephemeral: true 
+                    });
+                }
+                
+                // Check if at least one payment method is set
+                if (!registered.paypal && !registered.btc && !registered.bankName) {
+                    return interaction.reply({ 
+                        content: '❌ You need to set a payment method first! Use `/paypal`, `/btc`, or `/bank`',
                         ephemeral: true 
                     });
                 }
@@ -1124,6 +1158,9 @@ async function handleSlashCommand(interaction) {
                         '`/users` - List humans\n' +
                         '`/bots` - List bots\n' +
                         '`/leaderboard` - Top sellers', 
+                        inline: false },
+                    { name: '📍 **Where to Type**', value: 
+                        'All commands must be typed in **#👋-welcome** channel', 
                         inline: false },
                     { name: '❓ **Other**', value: 
                         '`/help` - This menu\n' +
@@ -1606,7 +1643,7 @@ client.on('messageCreate', async (message) => {
     if (!session || session.step !== 3) return;
     
     if (message.attachments.size === 0) {
-        // UPDATED: Mobile-friendly error message
+        // Mobile-friendly error message
         return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
     }
     
