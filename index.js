@@ -2,7 +2,7 @@
  * CARDVAULT GIFT CARD BUYER BOT
  * A professional Discord bot for buying and selling gift cards
  * 
- * @version 3.0.0 - SLASH COMMANDS EDITION
+ * @version 3.0.0 - FINAL EDITION
  * @features: Slash Commands Only, Buttons, Select Menus, Activity Logging
  * @author YourName
  * @license MIT
@@ -807,7 +807,15 @@ client.on('guildMemberAdd', async (member) => {
 
 client.on('interactionCreate', async (interaction) => {
     try {
-        // Handle slash commands
+        // FIX 1: DISABLE SLASH COMMANDS IN DMs
+        if (interaction.isChatInputCommand() && !interaction.guild) {
+            return interaction.reply({ 
+                content: '❌ Slash commands cannot be used in DMs. Please use the buttons below to continue selling.',
+                ephemeral: true 
+            });
+        }
+        
+        // Handle slash commands (server only)
         if (interaction.isChatInputCommand()) {
             if (interaction.user.id !== CONFIG.ADMIN_ID) {
                 const cooldownTime = 3;
@@ -1663,6 +1671,7 @@ client.on('messageCreate', async (message) => {
         image: image.url
     });
     
+    // FIX 2: Updated admin notification with command instructions
     client.guilds.cache.forEach(async (guild) => {
         const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
         if (adminChannel) {
@@ -1680,7 +1689,14 @@ client.on('messageCreate', async (message) => {
                 .setTimestamp();
             
             await adminChannel.send({ embeds: [adminEmbed] });
-            await adminChannel.send(`<@${CONFIG.ADMIN_ID}> New card ready for review!`);
+            
+            // NEW: Send clear admin instructions
+            await adminChannel.send({ 
+                content: `@here **New card ready for review!**\n\n` +
+                         `**To APPROVE:** \`/approve id:${txId} amount:XX\`\n` +
+                         `**To REJECT:** \`/reject id:${txId} reason:your reason\`\n\n` +
+                         `**Example:** \`/approve id:${txId} amount:50\``
+            });
         }
     });
     
