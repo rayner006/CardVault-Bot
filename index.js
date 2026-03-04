@@ -872,8 +872,9 @@ client.on('interactionCreate', async (interaction) => {
                 session.data.value = value;
                 sessions.update(user.id, { step: 3 });
                 
+                // UPDATED: Mobile-friendly upload instructions
                 await interaction.reply({
-                    content: '**Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\nJust drag and drop your image here.',
+                    content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload',
                     ephemeral: false
                 });
             }
@@ -958,7 +959,7 @@ async function handleSlashCommand(interaction) {
                             .setCustomId('sell_bitcoin')
                             .setLabel('Bitcoin')
                             .setStyle(ButtonStyle.Primary)
-                            .setEmoji('🪙'), // FIXED: Changed from ₿ to 🪙
+                            .setEmoji('🪙'),
                         new ButtonBuilder()
                             .setCustomId('sell_bank')
                             .setLabel('Bank Transfer')
@@ -1605,7 +1606,8 @@ client.on('messageCreate', async (message) => {
     if (!session || session.step !== 3) return;
     
     if (message.attachments.size === 0) {
-        return message.reply('❌ Please upload an image of the card.');
+        // UPDATED: Mobile-friendly error message
+        return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
     }
     
     const image = message.attachments.first();
