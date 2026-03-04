@@ -160,10 +160,26 @@ class DatabaseManager {
             )
         `);
 
-        // Insert default brands
-        const brands = ['Amazon', 'Google Play', 'Steam', 'Xbox', 'PlayStation', 'Netflix', 'Spotify', 'iTunes', 'Visa', 'Mastercard', 'Razer Gold', 'Nintendo eShop'];
+        // ===== UPDATED: Insert YOUR card brands =====
+        const brands = [
+            'Amazon',
+            'Steam',
+            'Sephora',
+            'Nordstrom',
+            'Walmart Visa',
+            'Google Play',
+            'Amex',
+            'Apple',
+            'Macy\'s',
+            'Footlocker',
+            'Nike',
+            'Mastercard',
+            'Xbox',
+            'Vanilla'
+        ];
         const insertBrand = this.db.prepare('INSERT OR IGNORE INTO card_brands (name) VALUES (?)');
         brands.forEach(brand => insertBrand.run(brand));
+        console.log(`[DATABASE] Loaded ${brands.length} card brands`);
     }
 
     // ===== USER METHODS =====
@@ -722,7 +738,7 @@ client.once('ready', () => {
 });
 
 // ============================================
-// WELCOME MESSAGE HANDLER
+// WELCOME MESSAGE HANDLER - UPDATED WITH YOUR CARD LIST
 // ============================================
 
 client.on('guildMemberAdd', async (member) => {
@@ -743,8 +759,23 @@ client.on('guildMemberAdd', async (member) => {
                     inline: false 
                 },
                 { 
+                    name: '📝 EXAMPLE:', 
+                    value: `\`/bank name:"Sarah Johnson" number:8123456789 bank:GTBank\``, 
+                    inline: false 
+                },
+                { 
                     name: 'Step 3: 🚀 Start Selling', 
                     value: `Type \`/start\` in the server to open a DM, then follow the buttons`, 
+                    inline: false 
+                },
+                { 
+                    name: 'Step 4: 📋 Check Commands', 
+                    value: `Visit <#📜-cardvault-commands> for all available commands`, 
+                    inline: false 
+                },
+                { 
+                    name: '🎮 ACCEPTED CARDS:', 
+                    value: 'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Vanilla', 
                     inline: false 
                 },
                 { name: '———————————————————', value: '**📋 RULES**', inline: false },
@@ -1069,6 +1100,9 @@ async function handleSlashCommand(interaction) {
                         '`/paypal` - Set PayPal\n' +
                         '`/btc` - Set Bitcoin\n' +
                         '`/bank` - Set Bank details', 
+                        inline: false },
+                    { name: '🎮 **Accepted Cards**', value: 
+                        'Amazon • Steam • Sephora • Nordstrom • Walmart Visa • Google Play • Amex • Apple • Macy\'s • Footlocker • Nike • Mastercard • Xbox • Vanilla', 
                         inline: false },
                     { name: '📊 **Server Info**', value: 
                         '`/members` - Member stats\n' +
@@ -1482,7 +1516,7 @@ async function handleButton(interaction) {
             session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
         }
         
-        // Get card brands for select menu
+        // Get card brands for select menu (NOW WITH YOUR FULL LIST)
         const brands = db.getCardBrands();
         
         const selectMenu = new StringSelectMenuBuilder()
