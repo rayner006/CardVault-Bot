@@ -2,7 +2,7 @@
  * CARDVAULT GIFT CARD BUYER BOT
  * A professional Discord bot for buying and selling gift cards
  * 
- * @version 2.0.0
+ * @version 2.0.1
  * @author YourName
  * @license MIT
  */
@@ -412,7 +412,7 @@ client.on('guildMemberAdd', async (member) => {
                 },
                 { 
                     name: 'Step 2: 💳 Set Payment Method', 
-                    value: `Use one of these commands:\n\`${CONFIG.PREFIX}paypal email@example.com\`\n\`${CONFIG.PREFIX}btc yourBitcoinAddress\`\n\`${CONFIG.PREFIX}bank "Your Name" 0123456789 BankName\``, 
+                    value: `Use one of these commands:\n\`${CONFIG.PREFIX}paypal email@example.com\`\n\`${CONFIG.PREFIX}btc yourBitcoinAddress\`\n\`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 BankName\``, 
                     inline: false 
                 },
                 { 
@@ -544,7 +544,7 @@ async function handleDM(message) {
                     return message.reply({
                         embeds: [EmbedHelper.error(
                             'Bank Details Not Set',
-                            `You need to set your bank details first!\nUse \`${CONFIG.PREFIX}bank "Your Name" 0123456789 BankName\` in the server.`
+                            `You need to set your bank details first!\nUse \`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 BankName\` in the server.`
                         )]
                     });
                 }
@@ -705,7 +705,7 @@ client.on('messageCreate', async (message) => {
                 { name: '💳 **Payment Methods**', value: 
                     `\`${CONFIG.PREFIX}paypal email\` - Set PayPal\n` +
                     `\`${CONFIG.PREFIX}btc address\` - Set Bitcoin\n` +
-                    `\`${CONFIG.PREFIX}bank "Name" 0123456789 Bank\` - Set Bank`, 
+                    `\`${CONFIG.PREFIX}bank "Full Name" 0123456789 Bank\` - Set Bank (use quotes!)`, 
                     inline: false },
                 { name: '👤 **Profile**', value: 
                     `\`${CONFIG.PREFIX}profile\` - View your profile`, 
@@ -742,7 +742,7 @@ client.on('messageCreate', async (message) => {
                     { name: '💳 Set Payment Method', value: 
                         `\`${CONFIG.PREFIX}paypal email\`\n` +
                         `\`${CONFIG.PREFIX}btc address\`\n` +
-                        `\`${CONFIG.PREFIX}bank "Name" 0123456789 Bank\``, inline: false }
+                        `\`${CONFIG.PREFIX}bank "Full Name" 0123456789 Bank\``, inline: false }
                 ]
             )]
         });
@@ -780,18 +780,51 @@ client.on('messageCreate', async (message) => {
         });
     }
 
+    // ===== FIXED BANK COMMAND =====
     if (command === 'bank') {
-        const accountName = args[0]?.replace(/"/g, '');
-        const accountNumber = args[1];
-        const bankName = args.slice(2).join(' ');
+        // Better regex to extract quoted strings and remaining args
+        const quoteRegex = /"([^"]*)"/g;
+        const quotedMatches = [...message.content.matchAll(quoteRegex)];
         
+        let accountName, accountNumber, bankName;
+        
+        if (quotedMatches.length >= 1) {
+            // First quoted string is account name
+            accountName = quotedMatches[0][1].trim();
+            
+            // Get the rest of the args (after the quoted parts)
+            const remainingArgs = message.content
+                .replace(/"([^"]*)"/g, '') // Remove quoted parts
+                .split(/\s+/) // Split by spaces
+                .filter(arg => arg && !arg.startsWith(CONFIG.PREFIX)); // Remove empty and prefix
+            
+            // First remaining arg is account number
+            accountNumber = remainingArgs[0];
+            
+            // Everything else is bank name
+            bankName = remainingArgs.slice(1).join(' ').trim();
+        } else {
+            // Fallback for no quotes (old format)
+            accountName = args[0]?.replace(/"/g, '');
+            accountNumber = args[1];
+            bankName = args.slice(2).join(' ');
+        }
+        
+        // Validation
         if (!accountName || !accountNumber || !bankName) {
             return message.reply(
-                `❌ Usage: \`${CONFIG.PREFIX}bank "Your Name" 0123456789 Bank Name\`\n` +
-                `Example: \`${CONFIG.PREFIX}bank "John Doe" 0123456789 GTBank\``
+                `❌ Usage: \`${CONFIG.PREFIX}bank "Your Full Name" 0123456789 Bank Name\`\n` +
+                `Example: \`${CONFIG.PREFIX}bank "Ifada Rayner" 8021141940 OPay\`\n` +
+                `⚠️ Make sure to use quotes around your name!`
             );
         }
         
+        // Validate account number (basic check)
+        if (!/^\d+$/.test(accountNumber)) {
+            return message.reply('❌ Account number should contain only numbers!');
+        }
+        
+        // Save to database
         db.setPaymentMethod(message.author.id, 'bank', `${accountName}|${accountNumber}|${bankName}`);
         
         return message.reply({
