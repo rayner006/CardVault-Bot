@@ -471,31 +471,6 @@ class EmbedHelper {
 }
 
 // ============================================
-// DM MESSAGE HELPER
-// ============================================
-
-class DMMessageHelper {
-    static async send(user, embed, content = null) {
-        try {
-            const messageOptions = {
-                embeds: [embed],
-                components: [] // Always disable buttons/components in DMs
-            };
-            
-            if (content) {
-                messageOptions.content = content;
-            }
-            
-            await user.send(messageOptions);
-            return true;
-        } catch (error) {
-            console.log(`[DM] Could not send DM to user ${user.id}: ${error.message}`);
-            return false;
-        }
-    }
-}
-
-// ============================================
 // LOGGING HELPER
 // ============================================
 
@@ -917,11 +892,11 @@ client.on('interactionCreate', async (interaction) => {
                 session.data.value = value;
                 sessions.update(user.id, { step: 3 });
                 
-                // === ONLY CHANGE MADE HERE ===
-                // Changed ephemeral from false to true
+                // ===== UPDATED MESSAGE WITH NEW TEXT =====
+                // Changed the mobile instruction to be more helpful
                 await interaction.reply({
-                    content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload',
-                    ephemeral: true // ← ONLY THIS CHANGE
+                    content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **To upload:** Click the chat icon (💬), then tap the **+** icon to attach your photo\n💻 **On Desktop:** Drag and drop or click to upload',
+                    ephemeral: false // ← KEPT AS FALSE (shows in chat)
                 });
             }
         }
@@ -1687,7 +1662,7 @@ client.on('messageCreate', async (message) => {
     
     if (message.attachments.size === 0) {
         // Mobile-friendly error message
-        return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
+        return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
     }
     
     const image = message.attachments.first();
