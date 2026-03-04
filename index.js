@@ -1681,7 +1681,7 @@ client.on('messageCreate', async (message) => {
         image: image.url
     });
     
-    // FIX 2: Updated admin notification with command instructions
+    // ===== FIXED: PayPal email now shows in admin notification =====
     client.guilds.cache.forEach(async (guild) => {
         const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
         if (adminChannel) {
@@ -1689,9 +1689,10 @@ client.on('messageCreate', async (message) => {
                 .setColor(0xFFA500)
                 .setTitle('🆕 New Gift Card Submission')
                 .addFields(
-                    { name: '🆔 Transaction', value: txId, inline: true },
+                    { name: '🆔 Transaction', value: txId, inline: false },
                     { name: '👤 User', value: message.author.username, inline: true },
-                    { name: '💳 Payment', value: session.data.paymentMethod, inline: true },
+                    { name: '💳 Payment Method', value: session.data.paymentMethod, inline: true },
+                    { name: '💳 Payment Details', value: session.data.paymentDetail || 'Not provided', inline: false }, // ← NOW SHOWS PAYPAL EMAIL
                     { name: '📦 Card', value: `${session.data.brand} - $${session.data.value}`, inline: true }
                 )
                 .setImage(image.url)
@@ -1700,7 +1701,7 @@ client.on('messageCreate', async (message) => {
             
             await adminChannel.send({ embeds: [adminEmbed] });
             
-            // NEW: Send clear admin instructions
+            // Send clear admin instructions
             await adminChannel.send({ 
                 content: `@here **New card ready for review!**\n\n` +
                          `**To APPROVE:** \`/approve id:${txId} amount:XX\`\n` +
