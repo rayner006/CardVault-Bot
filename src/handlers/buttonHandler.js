@@ -9,7 +9,9 @@ const { logToChannel } = require('../utils/logger');
 async function handleButton(interaction) {
     const { user, customId, client } = interaction;
     
-    const userData = client.db.getUser(user.id);
+    // FIXED: Added await here
+    const userData = await client.db.getUser(user.id);
+    
     if (userData?.isBanned) {
         return interaction.reply({ 
             content: '❌ You are banned from using CardVault.',
@@ -61,8 +63,9 @@ async function handleButton(interaction) {
             session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
         }
         
-        // Create brand selection menu
-        const brands = client.db.getCardBrands();
+        // FIXED: Added await here for getCardBrands
+        const brands = await client.db.getCardBrands();
+        
         const selectMenu = new StringSelectMenuBuilder()
             .setCustomId('select_brand')
             .setPlaceholder('Choose a card brand')
