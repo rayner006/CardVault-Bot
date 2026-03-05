@@ -5,6 +5,7 @@
 const { handleSlashCommand } = require('./commandHandler');
 const { handleButton } = require('./buttonHandler');
 const { handleSelectMenu } = require('./selectMenuHandler');
+const { handleCountrySelect } = require('./countryHandler'); // ADD THIS
 
 async function handleInteraction(interaction) {
     try {
@@ -28,7 +29,12 @@ async function handleInteraction(interaction) {
         
         // Handle select menu interactions
         else if (interaction.isStringSelectMenu()) {
-            await handleSelectMenu(interaction);
+            // Check if it's a country selection
+            if (interaction.customId === 'select_country') {
+                await handleCountrySelect(interaction);
+            } else {
+                await handleSelectMenu(interaction);
+            }
         }
         
         // Handle modal submissions
