@@ -2,7 +2,7 @@
  * Country Selection Handler
  */
 
-const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { COUNTRY_AVAILABILITY, CURRENCIES } = require('../config/constants');
 
 async function handleCountrySelect(interaction) {
@@ -36,7 +36,15 @@ async function handleCountrySelect(interaction) {
             )
         );
     
+    // Create back button to return to payment method
+    const backButton = new ButtonBuilder()
+        .setCustomId('back_to_payment')
+        .setLabel('← Back to Payment Method')
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('💳');
+    
     const row = new ActionRowBuilder().addComponents(brandSelect);
+    const buttonRow = new ActionRowBuilder().addComponents(backButton);
     
     // Get flag emoji
     const flags = {
@@ -50,7 +58,7 @@ async function handleCountrySelect(interaction) {
     
     await interaction.update({
         content: `**${flag} Selected: ${country} (${CURRENCIES[country]})\n\nNow select your card brand:**`,
-        components: [row]
+        components: [row, buttonRow]
     });
 }
 
