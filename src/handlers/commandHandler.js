@@ -13,7 +13,7 @@ async function handleSlashCommand(interaction) {
     const { commandName, options, user, client } = interaction;
     
     const isAdmin = user.id === process.env.ADMIN_ID;
-    const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce', 'receipt']; // ADDED 'receipt'
+    const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce', 'receipt'];
     
     // Check admin permissions
     if (adminCommands.includes(commandName) && !isAdmin) {
@@ -107,7 +107,7 @@ async function handleSlashCommand(interaction) {
         case 'announce':
             await handleAnnounce(interaction);
             break;
-        case 'receipt': // ADDED RECEIPT CASE
+        case 'receipt':
             await handleReceipt(interaction);
             break;
     }
@@ -175,7 +175,6 @@ async function handleStart(interaction) {
     const { user, client } = interaction;
     
     try {
-        // FIXED: Added await here
         const registered = await client.db.getUser(user.id);
         
         if (!registered || !registered.registered) {
@@ -237,7 +236,6 @@ async function handleProfile(interaction) {
     const { user, options, client } = interaction;
     const targetUser = options.getUser('user') || user;
     
-    // FIXED: Added await here
     const profileData = await client.db.getUser(targetUser.id);
     
     if (!profileData) {
@@ -247,7 +245,6 @@ async function handleProfile(interaction) {
         });
     }
     
-    // FIXED: Added await here
     const transactions = await client.db.getUserTransactions(targetUser.id);
     const recentTx = transactions.length > 0 ? transactions[0] : null;
     
@@ -350,6 +347,8 @@ async function handleBank(interaction) {
 
 async function handleHelp(interaction, isAdmin) {
     const { EmbedBuilder } = require('discord.js');
+    
+    // Create base embed with user commands only
     const helpEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle('📚 CardVault Bot Commands')
@@ -385,6 +384,7 @@ async function handleHelp(interaction, isAdmin) {
         .setFooter({ text: 'CardVault Gift Card Buyer' })
         .setTimestamp();
     
+    // ONLY show admin commands to admins
     if (isAdmin) {
         helpEmbed.addFields({ 
             name: '👑 **Admin Commands**', 
@@ -396,7 +396,7 @@ async function handleHelp(interaction, isAdmin) {
                 '`/transaction` - View details\n' +
                 '`/logs` - View activity logs\n' +
                 '`/announce` - Broadcast message\n' +
-                '`/receipt` - Request receipt from user', // ADDED RECEIPT TO HELP
+                '`/receipt` - Request receipt from user', 
             inline: false 
         });
     }
@@ -455,7 +455,6 @@ async function handleBots(interaction) {
 
 async function handleLeaderboard(interaction) {
     const { client } = interaction;
-    // FIXED: Added await here
     const topSellers = await client.db.getTopSellers(10);
     
     if (topSellers.length === 0) {
@@ -483,7 +482,6 @@ async function handleLeaderboard(interaction) {
 
 async function handlePending(interaction) {
     const { client } = interaction;
-    // FIXED: Added await here
     const pending = await client.db.getPendingTransactions();
     
     if (pending.length === 0) {
@@ -515,7 +513,6 @@ async function handlePending(interaction) {
 async function handleTransaction(interaction) {
     const { options, client } = interaction;
     const txId = options.getString('id');
-    // FIXED: Added await here
     const tx = await client.db.getTransaction(txId);
     
     if (!tx) {
@@ -547,7 +544,6 @@ async function handleApprove(interaction) {
     const approveId = options.getString('id');
     const amount = options.getInteger('amount');
     
-    // FIXED: Added await here
     const approveTx = await client.db.getTransaction(approveId);
     if (!approveTx) {
         return interaction.reply({ 
@@ -592,7 +588,6 @@ async function handleReject(interaction) {
     const rejectId = options.getString('id');
     const reason = options.getString('reason') || 'No reason provided';
     
-    // FIXED: Added await here
     const rejectTx = await client.db.getTransaction(rejectId);
     if (!rejectTx) {
         return interaction.reply({ 
@@ -635,7 +630,6 @@ async function handlePaid(interaction) {
     const { options, client } = interaction;
     const paidId = options.getString('id');
     
-    // FIXED: Added await here
     const paidTx = await client.db.getTransaction(paidId);
     if (!paidTx) {
         return interaction.reply({ 
@@ -679,7 +673,6 @@ async function handlePaid(interaction) {
 async function handleLogs(interaction) {
     const { options, client } = interaction;
     const limit = options.getInteger('limit') || 20;
-    // FIXED: Added await here
     const logs = await client.db.getRecentLogs(limit);
     
     const { EmbedBuilder } = require('discord.js');
@@ -747,7 +740,7 @@ async function handleAnnounce(interaction) {
     */
 }
 
-// NEW RECEIPT HANDLER FUNCTION - Add this at the bottom before module.exports
+// NEW RECEIPT HANDLER FUNCTION
 async function handleReceipt(interaction) {
     const { options, client } = interaction;
     const txId = options.getString('id');
