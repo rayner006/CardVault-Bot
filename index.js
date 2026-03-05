@@ -52,6 +52,7 @@ async function startBot() {
         // Attach managers to client for global access
         client.db = db;
         client.sessions = sessionManager;
+        client.pendingReceipts = new Map(); // ADD THIS - For tracking receipt requests
         
         // Register commands
         registerCommands();
