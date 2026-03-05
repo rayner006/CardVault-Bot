@@ -8,7 +8,7 @@ module.exports = {
         CLIENT_ID: process.env.CLIENT_ID,
         GUILD_ID: process.env.GUILD_ID,
         ADMIN_ID: process.env.ADMIN_ID,
-        SUPPORT_ID: process.env.SUPPORT_ID || '1478007761697509531',
+        SUPPORT_ID: process.env.SUPPORT_ID,
         LOG_CHANNEL: 'cardvault-logs'
     },
     
