@@ -2,7 +2,7 @@
  * Button Interaction Handler
  */
 
-const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { EmbedHelper } = require('../utils/embedBuilder');
 const { logToChannel } = require('../utils/logger');
 const { COUNTRY_AVAILABILITY, CURRENCIES } = require('../config/constants');
@@ -27,6 +27,46 @@ async function handleButton(interaction) {
         });
     }
     
+    // ===== HANDLE BACK BUTTON =====
+    if (customId === 'back_to_payment') {
+        const session = client.sessions.get(user.id);
+        if (!session) {
+            return interaction.reply({ 
+                content: '❌ Session expired. Please use `/start` again.',
+                ephemeral: true 
+            });
+        }
+        
+        // Show payment method buttons again
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('sell_paypal')
+                    .setLabel('PayPal')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('💳'),
+                new ButtonBuilder()
+                    .setCustomId('sell_bitcoin')
+                    .setLabel('Bitcoin')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('🪙'),
+                new ButtonBuilder()
+                    .setCustomId('sell_bank')
+                    .setLabel('Bank Transfer')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🏦')
+            );
+        
+        await interaction.update({
+            content: '👋 **Welcome to CardVault!**\n\nClick a button below to choose your payment method:',
+            components: [row]
+        });
+        
+        return; // Important: stop execution here
+    }
+    
+    // ===== HANDLE SELL BUTTONS =====
     if (customId.startsWith('sell_')) {
         const method = customId.replace('sell_', '');
         
