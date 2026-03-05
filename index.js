@@ -6,20 +6,20 @@
 require('dotenv').config();
 
 // Core
-const { client } = require('./core/client');
-const { registerCommands } = require('./core/commands');
+const { client } = require('./src/core/client');
+const { registerCommands } = require('./src/core/commands');
 
 // Managers
-const { DatabaseManager } = require('./managers/databaseManager');
-const { sessionManager } = require('./managers/sessionManager');
+const { DatabaseManager } = require('./src/managers/databaseManager');
+const { sessionManager } = require('./src/managers/sessionManager');
 
 // Handlers
-const { handleInteraction } = require('./handlers/interactionHandler');
-const { handleMessage } = require('./handlers/messageHandler');
+const { handleInteraction } = require('./src/handlers/interactionHandler');
+const { handleMessage } = require('./src/handlers/messageHandler');
 
 // Events
-const { handleReady } = require('./events/ready');
-const { handleGuildMemberAdd } = require('./events/guildMemberAdd');
+const { handleReady } = require('./src/events/ready');
+const { handleGuildMemberAdd } = require('./src/events/guildMemberAdd');
 
 // Express server
 const express = require('express');
