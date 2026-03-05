@@ -553,4 +553,172 @@ async function handleApprove(interaction) {
     client.db.updateTransactionStatus(approveId, 'approved');
     client.db.updateTransactionOffer(approveId, amount);
     
-   
+    try {
+        const userObj = await client.users.fetch(approveTx.userId);
+        if (userObj) {
+            await userObj.send({
+                embeds: [EmbedHelper.success(
+                    'Card Approved!',
+                    `Your card has been approved.`,
+                    [
+                        { name: 'Transaction', value: approveId, inline: true },
+                        { name: 'Offer', value: `$${amount}`, inline: true }
+                    ]
+                )]
+            });
+        }
+    } catch (error) {
+        console.log('Could not DM user');
+    }
+    
+    await interaction.reply(`✅ Transaction ${approveId} approved for $${amount}`);
+}
+
+async function handleReject(interaction) {
+    const { options, client } = interaction;
+    const rejectId = options.getString('id');
+    const reason = options.getString('reason') || 'No reason provided';
+    
+    const rejectTx = client.db.getTransaction(rejectId);
+    if (!rejectTx) {
+        return interaction.reply({ 
+            content: '❌ Transaction not found!',
+            ephemeral: true 
+        });
+    }
+    
+    if (rejectTx.status !== 'pending') {
+        return interaction.reply({ 
+            content: `❌ This transaction is already ${rejectTx.status}`,
+            ephemeral: true 
+        });
+    }
+    
+    client.db.updateTransactionStatus(rejectId, 'rejected', reason);
+    
+    try {
+        const userObj = await client.users.fetch(rejectTx.userId);
+        if (userObj) {
+            await userObj.send({
+                embeds: [EmbedHelper.error(
+                    'Card Rejected',
+                    `Your card was rejected.`,
+                    [
+                        { name: 'Transaction', value: rejectId, inline: true },
+                        { name: 'Reason', value: reason, inline: false }
+                    ]
+                )]
+            });
+        }
+    } catch (error) {
+        console.log('Could not DM user');
+    }
+    
+    await interaction.reply(`✅ Transaction ${rejectId} rejected.`);
+}
+
+async function handlePaid(interaction) {
+    const { options, client } = interaction;
+    const paidId = options.getString('id');
+    
+    const paidTx = client.db.getTransaction(paidId);
+    if (!paidTx) {
+        return interaction.reply({ 
+            content: '❌ Transaction not found!',
+            ephemeral: true 
+        });
+    }
+    
+    if (paidTx.status !== 'approved') {
+        return interaction.reply({ 
+            content: `❌ This transaction is ${paidTx.status}. It needs to be approved first.`,
+            ephemeral: true 
+        });
+    }
+    
+    client.db.updateTransactionStatus(paidId, 'paid');
+    client.db.incrementUserStats(paidTx.userId, paidTx.value);
+    
+    try {
+        const userObj = await client.users.fetch(paidTx.userId);
+        if (userObj) {
+            await userObj.send({
+                embeds: [EmbedHelper.success(
+                    'Paid (Approved)',
+                    `Your card has been approved and payment has been sent.`,
+                    [
+                        { name: 'Transaction', value: paidId, inline: true },
+                        { name: 'Card Amount', value: `$${paidTx.value}`, inline: true },
+                        { name: 'Offer Paid', value: `$${paidTx.offerAmount || paidTx.value}`, inline: true }
+                    ]
+                )]
+            });
+        }
+    } catch (error) {
+        console.log('Could not DM user');
+    }
+    
+    await interaction.reply(`✅ Payment for ${paidId} marked as sent.`);
+}
+
+async function handleLogs(interaction) {
+    const { options, client } = interaction;
+    const limit = options.getInteger('limit') || 20;
+    const logs = client.db.getRecentLogs(limit);
+    
+    const { EmbedBuilder } = require('discord.js');
+    const logsEmbed = new EmbedBuilder()
+        .setColor(0x808080)
+        .setTitle(`📋 Recent Logs (${logs.length})`)
+        .setTimestamp();
+    
+    let logText = '';
+    logs.slice(0, 15).forEach(log => {
+        const date = new Date(log.timestamp).toLocaleString();
+        logText += `[${date}] ${log.action} | ${log.userId} | ${log.details}\n`;
+    });
+    
+    if (logText.length > 2000) {
+        logText = logText.substring(0, 1900) + '...';
+    }
+    
+    logsEmbed.setDescription('```\n' + logText + '\n```');
+    
+    await interaction.reply({ embeds: [logsEmbed] });
+}
+
+async function handleAnnounce(interaction) {
+    const { options, client } = interaction;
+    const announcement = options.getString('message');
+    
+    await interaction.reply({
+        content: '📢 Sending announcement to all users...',
+        ephemeral: true
+    });
+    
+    const allUsers = client.db.db.prepare('SELECT userId FROM users').all();
+    let sentCount = 0;
+    
+    for (const u of allUsers) {
+        try {
+            const userObj = await client.users.fetch(u.userId);
+            await userObj.send({
+                embeds: [EmbedHelper.info(
+                    '📢 Announcement',
+                    announcement
+                )]
+            });
+            sentCount++;
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (error) {
+            console.log(`Could not DM user ${u.userId}`);
+        }
+    }
+    
+    await interaction.followUp({
+        content: `✅ Announcement sent to ${sentCount} users.`,
+        ephemeral: true
+    });
+}
+
+module.exports = { handleSlashCommand };
