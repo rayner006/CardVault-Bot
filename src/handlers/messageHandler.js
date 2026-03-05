@@ -16,7 +16,8 @@ async function handleMessage(message) {
     
     // Check for image attachment
     if (message.attachments.size === 0) {
-        return message.reply('❌ Please upload an image of the card.\n\n📱 **On Mobile:** Tap the **+** button below and select your photo\n💻 **On Desktop:** Drag and drop or click to upload');
+        // FIXED: Cleaned up message - removed drag/drop references
+        return message.reply('❌ Please upload an image of the card.\n\n📱 **Tap the + button to attach your photo**');
     }
     
     const image = message.attachments.first();
@@ -26,7 +27,7 @@ async function handleMessage(message) {
     }
     
     // Create transaction
-    const txId = message.client.db.createTransaction({
+    const txId = await message.client.db.createTransaction({
         userId,
         username: message.author.username,
         paymentMethod: session.data.paymentMethod,
@@ -82,7 +83,7 @@ async function handleMessage(message) {
     });
     
     // Log submission
-    message.client.db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
+    await message.client.db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
 }
 
 module.exports = { handleMessage };
