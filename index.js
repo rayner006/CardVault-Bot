@@ -1,6 +1,6 @@
 /**
  * CARDVAULT GIFT CARD BUYER BOT
- * @version 3.0.0
+ * @version 3.0.0 - MySQL Edition
  */
 
 require('dotenv').config();
@@ -10,7 +10,7 @@ const { client } = require('./src/core/client');
 const { registerCommands } = require('./src/core/commands');
 
 // Managers
-const { db } = require('./src/managers/databaseManager');
+const { DatabaseManager } = require('./src/managers/databaseManager');  // Note: Using DatabaseManager, not db directly
 const { sessionManager } = require('./src/managers/sessionManager');
 
 // Handlers
@@ -39,30 +39,62 @@ app.listen(PORT, () => {
     console.log(`[SERVER] Web server running on port ${PORT}`);
 });
 
-// Register commands
-registerCommands();
+// Initialize database and start bot
+async function startBot() {
+    try {
+        console.log('[BOT] Starting up...');
+        
+        // Initialize MySQL database
+        console.log('[DATABASE] Connecting to TiDB Cloud...');
+        const db = new DatabaseManager();
+        await db.initialize();
+        
+        // Attach managers to client for global access
+        client.db = db;
+        client.sessions = sessionManager;
+        
+        // Register commands
+        registerCommands();
+        
+        // Event handlers
+        client.once('ready', handleReady);
+        client.on('guildMemberAdd', handleGuildMemberAdd);
+        client.on('interactionCreate', handleInteraction);
+        client.on('messageCreate', handleMessage);
+        
+        // Error handling
+        process.on('unhandledRejection', (error) => {
+            console.error('[FATAL] Unhandled rejection:', error);
+        });
 
-// Attach managers to client for global access
-client.db = db;
-client.sessions = sessionManager;
+        client.on('error', (error) => {
+            console.error('[CLIENT ERROR]', error);
+        });
+        
+        // Graceful shutdown
+        process.on('SIGTERM', async () => {
+            console.log('[BOT] Received SIGTERM, shutting down gracefully...');
+            if (client.db) await client.db.close();
+            client.destroy();
+            process.exit(0);
+        });
+        
+        process.on('SIGINT', async () => {
+            console.log('[BOT] Received SIGINT, shutting down gracefully...');
+            if (client.db) await client.db.close();
+            client.destroy();
+            process.exit(0);
+        });
+        
+        // Login to Discord
+        await client.login(process.env.DISCORD_TOKEN);
+        console.log('[BOT] Login successful');
+        
+    } catch (error) {
+        console.error('[BOT] Failed to start:', error);
+        process.exit(1);
+    }
+}
 
-// Event handlers
-client.once('ready', handleReady);
-client.on('guildMemberAdd', handleGuildMemberAdd);
-client.on('interactionCreate', handleInteraction);
-client.on('messageCreate', handleMessage);
-
-// Error handling
-process.on('unhandledRejection', (error) => {
-    console.error('[FATAL] Unhandled rejection:', error);
-});
-
-client.on('error', (error) => {
-    console.error('[CLIENT ERROR]', error);
-});
-
-// Login
-client.login(process.env.DISCORD_TOKEN).catch((error) => {
-    console.error('[BOT] Login failed:', error.message);
-    process.exit(1);
-});
+// Start the bot
+startBot();
