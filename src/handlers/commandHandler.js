@@ -40,7 +40,7 @@ async function handleSlashCommand(interaction) {
     }
     
     // Check if user is banned
-    const userData = client.db.getUser(user.id);
+    const userData = await client.db.getUser(user.id);
     if (userData?.isBanned) {
         return interaction.reply({ 
             content: '❌ You are banned from using CardVault.',
@@ -118,7 +118,7 @@ async function handleSlashCommand(interaction) {
     );
 }
 
-// Command implementations (move each from your original file)
+// Command implementations
 async function handlePing(interaction) {
     await interaction.reply({
         embeds: [EmbedHelper.success(
@@ -130,7 +130,7 @@ async function handlePing(interaction) {
 
 async function handleRegister(interaction) {
     const { user, client } = interaction;
-    client.db.createUser(user.id);
+    await client.db.createUser(user.id);
     
     await interaction.reply({
         embeds: [EmbedHelper.success(
@@ -172,7 +172,9 @@ async function handleStart(interaction) {
     const { user, client } = interaction;
     
     try {
-        const registered = client.db.getUser(user.id);
+        // FIXED: Added await here
+        const registered = await client.db.getUser(user.id);
+        
         if (!registered || !registered.registered) {
             return interaction.reply({ 
                 content: '❌ You need to register first! Use `/register`',
@@ -231,7 +233,9 @@ async function handleStart(interaction) {
 async function handleProfile(interaction) {
     const { user, options, client } = interaction;
     const targetUser = options.getUser('user') || user;
-    const profileData = client.db.getUser(targetUser.id);
+    
+    // FIXED: Added await here
+    const profileData = await client.db.getUser(targetUser.id);
     
     if (!profileData) {
         return interaction.reply({ 
@@ -240,7 +244,8 @@ async function handleProfile(interaction) {
         });
     }
     
-    const transactions = client.db.getUserTransactions(targetUser.id);
+    // FIXED: Added await here
+    const transactions = await client.db.getUserTransactions(targetUser.id);
     const recentTx = transactions.length > 0 ? transactions[0] : null;
     
     const { EmbedBuilder } = require('discord.js');
@@ -281,7 +286,7 @@ async function handlePaypal(interaction) {
         });
     }
     
-    client.db.setPaymentMethod(user.id, 'paypal', email);
+    await client.db.setPaymentMethod(user.id, 'paypal', email);
     
     await interaction.reply({
         embeds: [EmbedHelper.success(
@@ -302,7 +307,7 @@ async function handleBtc(interaction) {
         });
     }
     
-    client.db.setPaymentMethod(user.id, 'btc', address);
+    await client.db.setPaymentMethod(user.id, 'btc', address);
     
     await interaction.reply({
         embeds: [EmbedHelper.success(
@@ -325,7 +330,7 @@ async function handleBank(interaction) {
         });
     }
     
-    client.db.setPaymentMethod(user.id, 'bank', `${accountName}|${accountNumber}|${bankName}`);
+    await client.db.setPaymentMethod(user.id, 'bank', `${accountName}|${accountNumber}|${bankName}`);
     
     await interaction.reply({
         embeds: [EmbedHelper.success(
@@ -446,7 +451,8 @@ async function handleBots(interaction) {
 
 async function handleLeaderboard(interaction) {
     const { client } = interaction;
-    const topSellers = client.db.getTopSellers(10);
+    // FIXED: Added await here
+    const topSellers = await client.db.getTopSellers(10);
     
     if (topSellers.length === 0) {
         return interaction.reply('📊 No sellers yet! Be the first!');
@@ -473,7 +479,8 @@ async function handleLeaderboard(interaction) {
 
 async function handlePending(interaction) {
     const { client } = interaction;
-    const pending = client.db.getPendingTransactions();
+    // FIXED: Added await here
+    const pending = await client.db.getPendingTransactions();
     
     if (pending.length === 0) {
         return interaction.reply('✅ No pending transactions!');
@@ -504,7 +511,8 @@ async function handlePending(interaction) {
 async function handleTransaction(interaction) {
     const { options, client } = interaction;
     const txId = options.getString('id');
-    const tx = client.db.getTransaction(txId);
+    // FIXED: Added await here
+    const tx = await client.db.getTransaction(txId);
     
     if (!tx) {
         return interaction.reply({ 
@@ -535,7 +543,8 @@ async function handleApprove(interaction) {
     const approveId = options.getString('id');
     const amount = options.getInteger('amount');
     
-    const approveTx = client.db.getTransaction(approveId);
+    // FIXED: Added await here
+    const approveTx = await client.db.getTransaction(approveId);
     if (!approveTx) {
         return interaction.reply({ 
             content: '❌ Transaction not found!',
@@ -550,8 +559,8 @@ async function handleApprove(interaction) {
         });
     }
     
-    client.db.updateTransactionStatus(approveId, 'approved');
-    client.db.updateTransactionOffer(approveId, amount);
+    await client.db.updateTransactionStatus(approveId, 'approved');
+    await client.db.updateTransactionOffer(approveId, amount);
     
     try {
         const userObj = await client.users.fetch(approveTx.userId);
@@ -579,7 +588,8 @@ async function handleReject(interaction) {
     const rejectId = options.getString('id');
     const reason = options.getString('reason') || 'No reason provided';
     
-    const rejectTx = client.db.getTransaction(rejectId);
+    // FIXED: Added await here
+    const rejectTx = await client.db.getTransaction(rejectId);
     if (!rejectTx) {
         return interaction.reply({ 
             content: '❌ Transaction not found!',
@@ -594,7 +604,7 @@ async function handleReject(interaction) {
         });
     }
     
-    client.db.updateTransactionStatus(rejectId, 'rejected', reason);
+    await client.db.updateTransactionStatus(rejectId, 'rejected', reason);
     
     try {
         const userObj = await client.users.fetch(rejectTx.userId);
@@ -621,7 +631,8 @@ async function handlePaid(interaction) {
     const { options, client } = interaction;
     const paidId = options.getString('id');
     
-    const paidTx = client.db.getTransaction(paidId);
+    // FIXED: Added await here
+    const paidTx = await client.db.getTransaction(paidId);
     if (!paidTx) {
         return interaction.reply({ 
             content: '❌ Transaction not found!',
@@ -636,8 +647,8 @@ async function handlePaid(interaction) {
         });
     }
     
-    client.db.updateTransactionStatus(paidId, 'paid');
-    client.db.incrementUserStats(paidTx.userId, paidTx.value);
+    await client.db.updateTransactionStatus(paidId, 'paid');
+    await client.db.incrementUserStats(paidTx.userId, paidTx.value);
     
     try {
         const userObj = await client.users.fetch(paidTx.userId);
@@ -664,7 +675,8 @@ async function handlePaid(interaction) {
 async function handleLogs(interaction) {
     const { options, client } = interaction;
     const limit = options.getInteger('limit') || 20;
-    const logs = client.db.getRecentLogs(limit);
+    // FIXED: Added await here
+    const logs = await client.db.getRecentLogs(limit);
     
     const { EmbedBuilder } = require('discord.js');
     const logsEmbed = new EmbedBuilder()
@@ -696,6 +708,15 @@ async function handleAnnounce(interaction) {
         ephemeral: true
     });
     
+    // FIXED: This needs to be updated for MySQL - currently using SQLite syntax
+    // For now, let's comment this out until we fix it
+    await interaction.followUp({
+        content: '✅ Announcement feature temporarily disabled while migrating to MySQL.',
+        ephemeral: true
+    });
+    
+    /*
+    // Original SQLite code - needs to be updated for MySQL
     const allUsers = client.db.db.prepare('SELECT userId FROM users').all();
     let sentCount = 0;
     
@@ -719,6 +740,7 @@ async function handleAnnounce(interaction) {
         content: `✅ Announcement sent to ${sentCount} users.`,
         ephemeral: true
     });
+    */
 }
 
 module.exports = { handleSlashCommand };
