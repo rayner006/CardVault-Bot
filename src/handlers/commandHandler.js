@@ -13,7 +13,7 @@ async function handleSlashCommand(interaction) {
     const { commandName, options, user, client } = interaction;
     
     const isAdmin = user.id === process.env.ADMIN_ID;
-    const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce'];
+    const adminCommands = ['pending', 'transaction', 'approve', 'reject', 'paid', 'logs', 'announce', 'receipt']; // ADDED 'receipt'
     
     // Check admin permissions
     if (adminCommands.includes(commandName) && !isAdmin) {
@@ -106,6 +106,9 @@ async function handleSlashCommand(interaction) {
             break;
         case 'announce':
             await handleAnnounce(interaction);
+            break;
+        case 'receipt': // ADDED RECEIPT CASE
+            await handleReceipt(interaction);
             break;
     }
     
@@ -392,7 +395,8 @@ async function handleHelp(interaction, isAdmin) {
                 '`/paid` - Mark as paid\n' +
                 '`/transaction` - View details\n' +
                 '`/logs` - View activity logs\n' +
-                '`/announce` - Broadcast message', 
+                '`/announce` - Broadcast message\n' +
+                '`/receipt` - Request receipt from user', // ADDED RECEIPT TO HELP
             inline: false 
         });
     }
@@ -741,6 +745,77 @@ async function handleAnnounce(interaction) {
         ephemeral: true
     });
     */
+}
+
+// NEW RECEIPT HANDLER FUNCTION - Add this at the bottom before module.exports
+async function handleReceipt(interaction) {
+    const { options, client } = interaction;
+    const txId = options.getString('id');
+    
+    await interaction.deferReply({ ephemeral: true });
+    
+    try {
+        // Get transaction
+        const tx = await client.db.getTransaction(txId);
+        
+        if (!tx) {
+            return interaction.editReply({ 
+                content: '❌ Transaction not found!',
+                ephemeral: true 
+            });
+        }
+        
+        // Get user
+        const user = await client.users.fetch(tx.userId);
+        
+        if (!user) {
+            return interaction.editReply({ 
+                content: '❌ User not found!',
+                ephemeral: true 
+            });
+        }
+        
+        // Store in pendingReceipts
+        if (!client.pendingReceipts) client.pendingReceipts = new Map();
+        client.pendingReceipts.set(user.id, {
+            txId: txId,
+            requestedBy: interaction.user.id,
+            requestedAt: Date.now()
+        });
+        
+        // Send message to user
+        await user.send({
+            content: '🧾 **Receipt Required**\n\n' +
+                     `For transaction: **${txId}**\n\n` +
+                     'Kindly upload your receipt for better processing.\n\n' +
+                     '📱 **Mobile:** Tap **💬** (next to blue box) **then tap +** to upload\n' +
+                     '💻 **Desktop:** Click **+** to upload'
+        });
+        
+        // Confirm to admin
+        await interaction.editReply({ 
+            content: `✅ Receipt request sent to <@${tx.userId}> for transaction **${txId}**`,
+            ephemeral: true 
+        });
+        
+        // Log the action
+        await client.db.log('receipt_requested', interaction.user.id, `Requested receipt for ${txId} from ${tx.userId}`);
+        
+    } catch (error) {
+        console.error('[RECEIPT ERROR]', error);
+        
+        if (error.code === 50007) {
+            await interaction.editReply({ 
+                content: '❌ Cannot DM user - they have DMs disabled!',
+                ephemeral: true 
+            });
+        } else {
+            await interaction.editReply({ 
+                content: '❌ Error sending receipt request. Check logs.',
+                ephemeral: true 
+            });
+        }
+    }
 }
 
 module.exports = { handleSlashCommand };
