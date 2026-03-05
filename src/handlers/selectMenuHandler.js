@@ -3,6 +3,7 @@
  */
 
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { CURRENCIES } = require('../config/constants');
 
 async function handleSelectMenu(interaction) {
     const { user, values, client } = interaction;
@@ -21,16 +22,20 @@ async function handleSelectMenu(interaction) {
         session.data.brand = brand;
         client.sessions.update(user.id, { step: 2 });
         
-        // Create modal for value input
+        // Get currency from session (default to USD if not set)
+        const currency = session.data.currency || 'USD';
+        const currencySymbol = getCurrencySymbol(currency);
+        
+        // Create modal for value input with DYNAMIC currency
         const modal = new ModalBuilder()
             .setCustomId('modal_value')
-            .setTitle('Enter Card Value');
+            .setTitle(`Enter Card Value (${currency})`);
         
         const valueInput = new TextInputBuilder()
             .setCustomId('card_value')
-            .setLabel('Card Value in USD')
+            .setLabel(`Card Value in ${currency} ${currencySymbol}`)
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('e.g., 25, 50, 100')
+            .setPlaceholder(`e.g., 25, 50, 100 ${currency}`)
             .setRequired(true)
             .setMinLength(1)
             .setMaxLength(4);
@@ -40,6 +45,18 @@ async function handleSelectMenu(interaction) {
         
         await interaction.showModal(modal);
     }
+}
+
+// Helper function to get currency symbol
+function getCurrencySymbol(currency) {
+    const symbols = {
+        'USD': '$',
+        'GBP': '£',
+        'CAD': 'C$',
+        'AUD': 'A$',
+        'EUR': '€'
+    };
+    return symbols[currency] || '$';
 }
 
 module.exports = { handleSelectMenu };
