@@ -5,38 +5,6 @@
 
 require('dotenv').config();
 
-// ========== DIAGNOSTIC - Show current directory structure ==========
-const fs = require('fs');
-console.log('=== CURRENT DIRECTORY CONTENTS ===');
-console.log('Files in current directory:');
-try {
-    const files = fs.readdirSync('.');
-    console.log(files);
-    
-    console.log('\nChecking if ./src exists:');
-    if (fs.existsSync('./src')) {
-        console.log('./src EXISTS - contents:');
-        console.log(fs.readdirSync('./src'));
-    } else {
-        console.log('./src DOES NOT EXIST');
-    }
-    
-    console.log('\nChecking if ./src/src exists:');
-    if (fs.existsSync('./src/src')) {
-        console.log('./src/src EXISTS - contents:');
-        console.log(fs.readdirSync('./src/src'));
-    } else {
-        console.log('./src/src DOES NOT EXIST');
-    }
-    
-    console.log('\nChecking current working directory:');
-    console.log(process.cwd());
-} catch (err) {
-    console.log('Error reading directory:', err.message);
-}
-console.log('================================\n');
-// ========== END DIAGNOSTIC ==========
-
 // Core
 const { client } = require('./src/core/client');
 const { registerCommands } = require('./src/core/commands');
