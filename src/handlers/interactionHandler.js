@@ -5,7 +5,7 @@
 const { handleSlashCommand } = require('./commandHandler');
 const { handleButton } = require('./buttonHandler');
 const { handleSelectMenu } = require('./selectMenuHandler');
-const { handleCountrySelect } = require('./countryHandler'); // ADD THIS
+const { handleCountrySelect } = require('./countryHandler');
 
 async function handleInteraction(interaction) {
     try {
@@ -78,9 +78,11 @@ async function handleModalSubmit(interaction) {
         session.data.value = value;
         interaction.client.sessions.update(user.id, { step: 3 });
         
-        // CLEANED MESSAGE - No drag/drop references
+        // UPDATED: Mobile-friendly upload instructions
         await interaction.reply({
-            content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **Tap the + button to attach your photo**',
+            content: '📸 **Upload a CLEAR photo of the card (front & back)**\nMake sure the code is visible!\n\n' +
+                     '📱 **Mobile:** Tap **💬** (next to blue box) **then tap +** to upload\n' +
+                     '💻 **Desktop:** Click **+** to upload',
             ephemeral: false
         });
     }
