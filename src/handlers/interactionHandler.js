@@ -1,54 +1,3 @@
-/**
- * Main Interaction Handler
- */
-
-const { handleSlashCommand } = require('./commandHandler');
-const { handleButton } = require('./buttonHandler');
-const { handleSelectMenu } = require('./selectMenuHandler');
-
-async function handleInteraction(interaction) {
-    try {
-        // Disable slash commands in DMs
-        if (interaction.isChatInputCommand() && !interaction.guild) {
-            return interaction.reply({ 
-                content: '❌ Slash commands cannot be used in DMs. Please use the buttons below to continue selling.',
-                ephemeral: true 
-            });
-        }
-        
-        // Handle slash commands
-        if (interaction.isChatInputCommand()) {
-            await handleSlashCommand(interaction);
-        }
-        
-        // Handle button interactions
-        else if (interaction.isButton()) {
-            await handleButton(interaction);
-        }
-        
-        // Handle select menu interactions
-        else if (interaction.isStringSelectMenu()) {
-            await handleSelectMenu(interaction);
-        }
-        
-        // Handle modal submissions
-        else if (interaction.isModalSubmit()) {
-            await handleModalSubmit(interaction);
-        }
-        
-    } catch (error) {
-        console.error('[ERROR] Interaction error:', error);
-        
-        const errorMessage = '❌ An error occurred while processing your request.';
-        
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
-        } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
-        }
-    }
-}
-
 async function handleModalSubmit(interaction) {
     if (interaction.customId === 'modal_value') {
         const value = parseInt(interaction.fields.getTextInputValue('card_value'));
@@ -72,11 +21,10 @@ async function handleModalSubmit(interaction) {
         session.data.value = value;
         interaction.client.sessions.update(user.id, { step: 3 });
         
+        // CLEANED MESSAGE - No drag/drop references
         await interaction.reply({
-            content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **To upload:** Click the chat icon (💬), then tap the **+** icon to attach your photo\n💻 **On Desktop:** Drag and drop or click to upload',
+            content: '📸 **Please upload a CLEAR photo of the card**\nMake sure the code is visible!\n\n📱 **Tap the + button to attach your photo**',
             ephemeral: false
         });
     }
 }
-
-module.exports = { handleInteraction };
