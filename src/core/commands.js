@@ -193,6 +193,20 @@ const commands = [
             }
         ],
         default_member_permissions: '0'
+    },
+    // NEW RECEIPT COMMAND - Add this
+    {
+        name: 'receipt',
+        description: 'Request receipt from user (Admin only)',
+        options: [
+            {
+                name: 'id',
+                description: 'Transaction ID',
+                type: 3,
+                required: true
+            }
+        ],
+        default_member_permissions: '0'
     }
 ];
 
