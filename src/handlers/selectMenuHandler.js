@@ -2,7 +2,7 @@
  * Select Menu Handler
  */
 
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
+const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { CURRENCIES } = require('../config/constants');
 
 async function handleSelectMenu(interaction) {
@@ -20,11 +20,38 @@ async function handleSelectMenu(interaction) {
         }
         
         session.data.brand = brand;
-        client.sessions.update(user.id, { step: 2 });
+        session.step = 2;
+        client.sessions.update(user.id, session);
         
         // Get currency from session (default to USD if not set)
         const currency = session.data.currency || 'USD';
         const currencySymbol = getCurrencySymbol(currency);
+        
+        // Create a message with back button before showing modal
+        // Get flag emoji
+        const flags = {
+            'US': '🇺🇸',
+            'UK': '🇬🇧',
+            'CANADA': '🇨🇦',
+            'AUSTRALIA': '🇦🇺',
+            'EURO': '🇪🇺'
+        };
+        const flag = flags[session.data.country] || '🌍';
+        
+        // Create back button to return to country selection
+        const backButton = new ButtonBuilder()
+            .setCustomId('back_to_countries')
+            .setLabel('← Back to Countries')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('🌍');
+        
+        const buttonRow = new ActionRowBuilder().addComponents(backButton);
+        
+        // Send a message with back button, then show modal
+        await interaction.update({
+            content: `**${flag} Selected: ${session.data.country} (${session.data.currency})\n🎴 Selected Brand: ${brand}\n\nClick the button below to enter card value:**`,
+            components: [buttonRow]
+        });
         
         // Create modal for value input with DYNAMIC currency
         const modal = new ModalBuilder()
@@ -43,7 +70,14 @@ async function handleSelectMenu(interaction) {
         const row = new ActionRowBuilder().addComponents(valueInput);
         modal.addComponents(row);
         
-        await interaction.showModal(modal);
+        // Show the modal
+        setTimeout(async () => {
+            try {
+                await interaction.showModal(modal);
+            } catch (error) {
+                console.error('[MODAL ERROR]', error);
+            }
+        }, 500);
     }
 }
 
