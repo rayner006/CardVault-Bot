@@ -5,6 +5,7 @@
 const { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { EmbedHelper } = require('../utils/embedBuilder');
 const { logToChannel } = require('../utils/logger');
+const { COUNTRY_AVAILABILITY, CURRENCIES } = require('../config/constants');
 
 async function handleButton(interaction) {
     const { user, customId, client } = interaction;
@@ -63,24 +64,37 @@ async function handleButton(interaction) {
             session.data.paymentDetail = `${userData.bankName} | ${userData.bankNumber} | ${userData.bankAccount}`;
         }
         
-        // FIXED: Added await here for getCardBrands
-        const brands = await client.db.getCardBrands();
+        // COUNTRY SELECTION FIRST
+        const countrySelect = new StringSelectMenuBuilder()
+            .setCustomId('select_country')
+            .setPlaceholder('🌍 Select card country/region')
+            .addOptions([
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('🇺🇸 United States')
+                    .setValue('US')
+                    .setDescription('USD - US Dollar'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('🇬🇧 United Kingdom')
+                    .setValue('UK')
+                    .setDescription('GBP - British Pound'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('🇨🇦 Canada')
+                    .setValue('CANADA')
+                    .setDescription('CAD - Canadian Dollar'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('🇦🇺 Australia')
+                    .setValue('AUSTRALIA')
+                    .setDescription('AUD - Australian Dollar'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('🇪🇺 Europe')
+                    .setValue('EURO')
+                    .setDescription('EUR - Euro')
+            ]);
         
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('select_brand')
-            .setPlaceholder('Choose a card brand')
-            .addOptions(
-                brands.slice(0, 25).map(brand => 
-                    new StringSelectMenuOptionBuilder()
-                        .setLabel(brand)
-                        .setValue(brand)
-                )
-            );
-        
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        const row = new ActionRowBuilder().addComponents(countrySelect);
         
         await interaction.update({
-            content: '**Select your card brand:**',
+            content: '**🌍 First, select the card\'s country/region:**',
             components: [row]
         });
     }
