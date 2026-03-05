@@ -1,5 +1,5 @@
 /**
- * DM Message Handler (for image uploads)
+ * DM Message Handler (for image uploads and receipt replies)
  */
 
 const { EmbedBuilder } = require('discord.js');
@@ -7,7 +7,14 @@ const { EmbedHelper } = require('../utils/embedBuilder');
 
 async function handleMessage(message) {
     if (message.author.bot) return;
-    if (message.guild !== null) return; // Only DMs
+    
+    // ===== NEW: Check if this is a receipt reply =====
+    if (message.guild === null && message.client.pendingReceipts?.has(message.author.id)) {
+        return handleReceiptReply(message);
+    }
+    
+    // ===== EXISTING: Normal card selling flow =====
+    if (message.guild !== null) return; // Only DMs for selling flow
     
     const userId = message.author.id;
     const session = message.client.sessions.get(userId);
@@ -80,6 +87,59 @@ async function handleMessage(message) {
     });
     
     await message.client.db.log('card_submitted', userId, `Submitted ${session.data.brand} - $${session.data.value}`);
+}
+
+// ===== NEW: Handle receipt replies from users =====
+async function handleReceiptReply(message) {
+    const pendingReceipt = message.client.pendingReceipts.get(message.author.id);
+    
+    // Check for image attachment
+    if (message.attachments.size === 0) {
+        return message.reply('❌ Please upload an image of the receipt.\n\n📱 **Tap the + button to attach your photo**');
+    }
+    
+    const image = message.attachments.first();
+    
+    if (!image.contentType?.startsWith('image/')) {
+        return message.reply('❌ Please upload a valid image file.');
+    }
+    
+    // Get transaction details
+    const tx = await message.client.db.getTransaction(pendingReceipt.txId);
+    
+    // Notify admin channel
+    message.client.guilds.cache.forEach(async (guild) => {
+        const adminChannel = guild.channels.cache.find(c => c.name === 'admin');
+        if (adminChannel) {
+            const receiptEmbed = new EmbedBuilder()
+                .setColor(0x00FF00)
+                .setTitle('🧾 Receipt Received')
+                .setDescription(`Receipt for transaction **${pendingReceipt.txId}**`)
+                .addFields(
+                    { name: '👤 User', value: `${message.author.username} (${message.author.id})`, inline: true },
+                    { name: '💳 Card', value: tx ? `${tx.brand} - $${tx.value}` : 'Unknown', inline: true },
+                    { name: '📅 Requested by', value: `<@${pendingReceipt.requestedBy}>`, inline: true }
+                )
+                .setImage(image.url)
+                .setTimestamp();
+            
+            await adminChannel.send({ embeds: [receiptEmbed] });
+            
+            // Also send a ping to the admin who requested it
+            await adminChannel.send({
+                content: `<@${pendingReceipt.requestedBy}> receipt received for **${pendingReceipt.txId}**`
+            });
+        }
+    });
+    
+    // Clear pending receipt
+    message.client.pendingReceipts.delete(message.author.id);
+    
+    // Confirm to user
+    await message.reply('✅ Receipt received! Admin has been notified.');
+    
+    // Log
+    await message.client.db.log('receipt_received', message.author.id, `Uploaded receipt for ${pendingReceipt.txId}`);
 }
 
 module.exports = { handleMessage };
