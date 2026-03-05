@@ -12,23 +12,42 @@ module.exports = {
         LOG_CHANNEL: 'cardvault-logs'
     },
     
+    // Same cards, just with country variants
     CARD_BRANDS: [
-        'Amazon',
-        'Steam',
-        'Sephora',
-        'Nordstrom',
-        'Walmart Visa',
-        'Google Play',
-        'Amex',
-        'Apple',
-        'Macy\'s',
-        'Footlocker',
-        'Nike',
-        'Mastercard',
-        'Xbox',
-        'Razor Gold',
-        'Vanilla'
+        'Amazon',      // Available in: US, UK, CA, AU, EU
+        'Steam',       // Available in: US, UK, CA, AU, EU
+        'Sephora',     // Available in: US, CA, EU
+        'Nordstrom',   // Available in: US
+        'Walmart',     // Available in: US, CA
+        'Google Play', // Available in: US, UK, CA, AU, EU
+        'Amex',        // Available in: US, CA, AU, EU
+        'Apple',       // Available in: US, UK, CA, AU, EU
+        'Macy\'s',     // Available in: US
+        'Footlocker',  // Available in: US, UK, CA, AU, EU
+        'Nike',        // Available in: US, UK, CA, AU, EU
+        'Mastercard',  // Available in: US, UK, CA, AU, EU
+        'Xbox',        // Available in: US, UK, CA, AU, EU
+        'Razor Gold',  // Available in: US, UK, AU, EU
+        'Vanilla'      // Available in: US, CA
     ],
+    
+    // Country availability mapping
+    COUNTRY_AVAILABILITY: {
+        'US': ['Amazon', 'Steam', 'Sephora', 'Nordstrom', 'Walmart', 'Google Play', 'Amex', 'Apple', 'Macy\'s', 'Footlocker', 'Nike', 'Mastercard', 'Xbox', 'Razor Gold', 'Vanilla'],
+        'UK': ['Amazon', 'Steam', 'Google Play', 'Apple', 'Footlocker', 'Nike', 'Mastercard', 'Xbox', 'Razor Gold'],
+        'CANADA': ['Amazon', 'Steam', 'Sephora', 'Walmart', 'Google Play', 'Amex', 'Apple', 'Footlocker', 'Nike', 'Mastercard', 'Xbox', 'Vanilla'],
+        'AUSTRALIA': ['Amazon', 'Steam', 'Google Play', 'Amex', 'Apple', 'Footlocker', 'Nike', 'Mastercard', 'Xbox', 'Razor Gold'],
+        'EURO': ['Amazon', 'Steam', 'Sephora', 'Google Play', 'Amex', 'Apple', 'Footlocker', 'Nike', 'Mastercard', 'Xbox', 'Razor Gold']
+    },
+    
+    // Currency mapping
+    CURRENCIES: {
+        'US': 'USD',
+        'UK': 'GBP',
+        'CANADA': 'CAD',
+        'AUSTRALIA': 'AUD',
+        'EURO': 'EUR'
+    },
     
     COOLDOWN_TIME: 3, // seconds
     SESSION_TIMEOUT: 30 * 60 * 1000, // 30 minutes
