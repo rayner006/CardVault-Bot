@@ -265,9 +265,10 @@ async function handleProfile(interaction) {
         .setTimestamp();
     
     if (recentTx) {
+        const currencySymbol = getCurrencySymbol(recentTx.currency || 'USD');
         profileEmbed.addFields({ 
             name: '📋 Last Transaction', 
-            value: `${recentTx.brand} - $${recentTx.value} (${recentTx.status})`, 
+            value: `${recentTx.brand} - ${currencySymbol}${recentTx.value} (${recentTx.status})`, 
             inline: false 
         });
     }
@@ -496,9 +497,10 @@ async function handlePending(interaction) {
     
     pending.slice(0, 10).forEach(tx => {
         const date = new Date(tx.submittedAt).toLocaleString();
+        const currencySymbol = getCurrencySymbol(tx.currency || 'USD');
         pendingEmbed.addFields({
             name: `${tx.txId} - ${tx.username}`,
-            value: `${tx.brand} - $${tx.value} | ${date}`,
+            value: `${tx.brand} - ${currencySymbol}${tx.value} | ${date}`,
             inline: false
         });
     });
@@ -523,13 +525,15 @@ async function handleTransaction(interaction) {
     }
     
     const { EmbedBuilder } = require('discord.js');
+    const currencySymbol = getCurrencySymbol(tx.currency || 'USD');
     const txEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(`📋 Transaction: ${tx.txId}`)
         .addFields(
             { name: '👤 User', value: tx.username, inline: true },
-            { name: '📦 Card', value: `${tx.brand} - $${tx.value}`, inline: true },
+            { name: '📦 Card', value: `${tx.brand} - ${currencySymbol}${tx.value}`, inline: true },
             { name: '💳 Payment', value: tx.paymentMethod, inline: true },
+            { name: '💱 Currency', value: tx.currency || 'USD', inline: true },
             { name: '📊 Status', value: tx.status, inline: true },
             { name: '📅 Submitted', value: new Date(tx.submittedAt).toLocaleString(), inline: true }
         )
@@ -565,13 +569,14 @@ async function handleApprove(interaction) {
     try {
         const userObj = await client.users.fetch(approveTx.userId);
         if (userObj) {
+            const currencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
             await userObj.send({
                 embeds: [EmbedHelper.success(
                     'Card Approved!',
                     `Your card has been approved.`,
                     [
                         { name: 'Transaction', value: approveId, inline: true },
-                        { name: 'Offer', value: `$${amount}`, inline: true }
+                        { name: 'Offer', value: `${currencySymbol}${amount}`, inline: true }
                     ]
                 )]
             });
@@ -580,7 +585,8 @@ async function handleApprove(interaction) {
         console.log('Could not DM user');
     }
     
-    await interaction.reply(`✅ Transaction ${approveId} approved for $${amount}`);
+    const currencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
+    await interaction.reply(`✅ Transaction ${approveId} approved for ${currencySymbol}${amount}`);
 }
 
 async function handleReject(interaction) {
@@ -651,14 +657,15 @@ async function handlePaid(interaction) {
     try {
         const userObj = await client.users.fetch(paidTx.userId);
         if (userObj) {
+            const currencySymbol = getCurrencySymbol(paidTx.currency || 'USD');
             await userObj.send({
                 embeds: [EmbedHelper.success(
-                    'Paid (Approved)',
-                    `Your card has been approved and payment has been sent.`,
+                    'Payment Sent!',
+                    `Your payment has been processed.`,
                     [
                         { name: 'Transaction', value: paidId, inline: true },
-                        { name: 'Card Amount', value: `$${paidTx.value}`, inline: true },
-                        { name: 'Offer Paid', value: `$${paidTx.offerAmount || paidTx.value}`, inline: true }
+                        { name: 'Card Amount', value: `${currencySymbol}${paidTx.value}`, inline: true },
+                        { name: 'Offer Paid', value: `${currencySymbol}${paidTx.offerAmount || paidTx.value}`, inline: true }
                     ]
                 )]
             });
@@ -667,7 +674,8 @@ async function handlePaid(interaction) {
         console.log('Could not DM user');
     }
     
-    await interaction.reply(`✅ Payment for ${paidId} marked as sent.`);
+    const currencySymbol = getCurrencySymbol(paidTx.currency || 'USD');
+    await interaction.reply(`✅ Payment for ${paidId} marked as sent (${currencySymbol}${paidTx.offerAmount || paidTx.value})`);
 }
 
 async function handleLogs(interaction) {
@@ -740,7 +748,7 @@ async function handleAnnounce(interaction) {
     */
 }
 
-// NEW RECEIPT HANDLER FUNCTION
+// RECEIPT HANDLER FUNCTION
 async function handleReceipt(interaction) {
     const { options, client } = interaction;
     const txId = options.getString('id');
@@ -809,6 +817,18 @@ async function handleReceipt(interaction) {
             });
         }
     }
+}
+
+// Helper function to get currency symbol
+function getCurrencySymbol(currency) {
+    const symbols = {
+        'USD': '$',
+        'GBP': '£',
+        'CAD': 'C$',
+        'AUD': 'A$',
+        'EUR': '€'
+    };
+    return symbols[currency] || '$';
 }
 
 module.exports = { handleSlashCommand };
