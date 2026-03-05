@@ -2,7 +2,7 @@
  * DM Message Handler (for image uploads and receipt replies)
  */
 
-const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const { EmbedHelper } = require('../utils/embedBuilder');
 
 async function handleMessage(message) {
@@ -21,63 +21,15 @@ async function handleMessage(message) {
     
     if (!session || session.step !== 3) return;
     
-    // Check if this is a back button interaction (not a message with attachment)
-    if (message.content === '!back' || message.content === '← Back') {
-        // Go back to value entry (step 2)
-        session.step = 2;
-        message.client.sessions.update(userId, session);
-        
-        const currency = session.data.currency || 'USD';
-        const currencySymbol = getCurrencySymbol(currency);
-        
-        // Create back button to return to brand selection
-        const backToBrandsBtn = new ButtonBuilder()
-            .setCustomId('back_to_brands')
-            .setLabel('← Back to Brand Selection')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('🎴');
-        
-        const row = new ActionRowBuilder().addComponents(backToBrandsBtn);
-        
-        return message.reply({
-            content: `📝 **You went back to value entry**\n\nCurrent card: **${session.data.brand}**\nValue: **${currencySymbol}${session.data.value || 'Not set'}**\n\nUse the button below to go back to brand selection or type a new value:`,
-            components: [row]
-        });
-    }
-    
     // Check for image attachment
     if (message.attachments.size === 0) {
-        // Create back button to return to value entry
-        const backButton = new ButtonBuilder()
-            .setCustomId('back_to_value')
-            .setLabel('← Back to Value Entry')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('💰');
-        
-        const row = new ActionRowBuilder().addComponents(backButton);
-        
-        return message.reply({
-            content: '❌ **Please upload an image of the card.**\n\n📸 **Upload a CLEAR photo of the card (front & back)**\nMake sure the code is visible!\n\n📱 **Mobile:** Tap **💬** (next to blue box) **then tap +** to upload\n💻 **Desktop:** Click **+** to upload\n\n*Click the button below if you need to change the value:*',
-            components: [row]
-        });
+        return message.reply('❌ Please upload an image of the card.\n\n📱 **Tap the + button to attach your photo**');
     }
     
     const image = message.attachments.first();
     
     if (!image.contentType?.startsWith('image/')) {
-        // Create back button to return to value entry
-        const backButton = new ButtonBuilder()
-            .setCustomId('back_to_value')
-            .setLabel('← Back to Value Entry')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('💰');
-        
-        const row = new ActionRowBuilder().addComponents(backButton);
-        
-        return message.reply({
-            content: '❌ **Please upload a valid image file** (JPEG, PNG, etc.).\n\n*Click the button below to go back and fix the value:*',
-            components: [row]
-        });
+        return message.reply('❌ Please upload a valid image file.');
     }
     
     const txId = await message.client.db.createTransaction({
