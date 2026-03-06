@@ -526,6 +526,8 @@ async function handleTransaction(interaction) {
     
     const { EmbedBuilder } = require('discord.js');
     const currencySymbol = getCurrencySymbol(tx.currency || 'USD');
+    const offerCurrencySymbol = getCurrencySymbol(tx.offerCurrency || 'USD');
+    
     const txEmbed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(`📋 Transaction: ${tx.txId}`)
@@ -533,7 +535,8 @@ async function handleTransaction(interaction) {
             { name: '👤 User', value: tx.username, inline: true },
             { name: '📦 Card', value: `${tx.brand} - ${currencySymbol}${tx.value}`, inline: true },
             { name: '💳 Payment', value: tx.paymentMethod, inline: true },
-            { name: '💱 Currency', value: tx.currency || 'USD', inline: true },
+            { name: '💱 Card Currency', value: tx.currency || 'USD', inline: true },
+            { name: '💰 Offer', value: tx.offerAmount ? `${offerCurrencySymbol}${tx.offerAmount}` : 'Not set', inline: true },
             { name: '📊 Status', value: tx.status, inline: true },
             { name: '📅 Submitted', value: new Date(tx.submittedAt).toLocaleString(), inline: true }
         )
@@ -564,19 +567,20 @@ async function handleApprove(interaction) {
     }
     
     await client.db.updateTransactionStatus(approveId, 'approved');
-    await client.db.updateTransactionOffer(approveId, amount);
+    await client.db.updateTransactionOffer(approveId, amount, 'USD'); // Explicitly set offer as USD
     
     try {
         const userObj = await client.users.fetch(approveTx.userId);
         if (userObj) {
-            const currencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
+            const cardCurrencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
             await userObj.send({
                 embeds: [EmbedHelper.success(
                     'Card Approved!',
                     `Your card has been approved.`,
                     [
                         { name: 'Transaction', value: approveId, inline: true },
-                        { name: 'Offer', value: `${currencySymbol}${amount}`, inline: true }
+                        { name: 'Card Submitted', value: `${cardCurrencySymbol}${approveTx.value}`, inline: true },
+                        { name: 'Offer', value: `$${amount} USD`, inline: true }
                     ]
                 )]
             });
@@ -585,8 +589,8 @@ async function handleApprove(interaction) {
         console.log('Could not DM user');
     }
     
-    const currencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
-    await interaction.reply(`✅ Transaction ${approveId} approved for ${currencySymbol}${amount}`);
+    const cardCurrencySymbol = getCurrencySymbol(approveTx.currency || 'USD');
+    await interaction.reply(`✅ Transaction ${approveId} approved - Card: ${cardCurrencySymbol}${approveTx.value} | Offer: $${amount} USD`);
 }
 
 async function handleReject(interaction) {
@@ -657,15 +661,18 @@ async function handlePaid(interaction) {
     try {
         const userObj = await client.users.fetch(paidTx.userId);
         if (userObj) {
-            const currencySymbol = getCurrencySymbol(paidTx.currency || 'USD');
+            // Get symbols for different currencies
+            const cardCurrencySymbol = getCurrencySymbol(paidTx.currency || 'USD');
+            const offerCurrencySymbol = getCurrencySymbol(paidTx.offerCurrency || 'USD');
+            
             await userObj.send({
                 embeds: [EmbedHelper.success(
                     'Payment Sent!',
                     `Your payment has been processed.`,
                     [
                         { name: 'Transaction', value: paidId, inline: true },
-                        { name: 'Card Amount', value: `${currencySymbol}${paidTx.value}`, inline: true },
-                        { name: 'Offer Paid', value: `${currencySymbol}${paidTx.offerAmount || paidTx.value}`, inline: true }
+                        { name: 'Card Submitted', value: `${cardCurrencySymbol}${paidTx.value}`, inline: true },
+                        { name: 'Offer Paid', value: `${offerCurrencySymbol}${paidTx.offerAmount || paidTx.value} USD`, inline: true }
                     ]
                 )]
             });
@@ -674,8 +681,11 @@ async function handlePaid(interaction) {
         console.log('Could not DM user');
     }
     
-    const currencySymbol = getCurrencySymbol(paidTx.currency || 'USD');
-    await interaction.reply(`✅ Payment for ${paidId} marked as sent (${currencySymbol}${paidTx.offerAmount || paidTx.value})`);
+    // Fix the admin reply too
+    const cardSymbol = getCurrencySymbol(paidTx.currency || 'USD');
+    const offerSymbol = getCurrencySymbol(paidTx.offerCurrency || 'USD');
+    
+    await interaction.reply(`✅ Payment for ${paidId} marked as sent (Card: ${cardSymbol}${paidTx.value} | Paid: ${offerSymbol}${paidTx.offerAmount || paidTx.value} USD)`);
 }
 
 async function handleLogs(interaction) {
