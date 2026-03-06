@@ -24,9 +24,11 @@ class DatabaseManager {
                 queueLimit: 0
             });
 
+            // Test connection
             const connection = await this.pool.getConnection();
             console.log('[DATABASE] MySQL connected successfully');
             
+            // Create tables
             await this.createTables();
             
             connection.release();
@@ -39,6 +41,7 @@ class DatabaseManager {
     }
 
     async createTables() {
+        // Users table
         await this.pool.execute(`
             CREATE TABLE IF NOT EXISTS users (
                 userId VARCHAR(255) PRIMARY KEY,
@@ -57,6 +60,7 @@ class DatabaseManager {
             )
         `);
 
+        // Transactions table
         await this.pool.execute(`
             CREATE TABLE IF NOT EXISTS transactions (
                 txId VARCHAR(255) PRIMARY KEY,
@@ -66,7 +70,6 @@ class DatabaseManager {
                 paymentDetail TEXT,
                 brand TEXT,
                 value INT,
-                currency VARCHAR(10) DEFAULT 'USD',
                 image TEXT,
                 status VARCHAR(50) DEFAULT 'pending',
                 submittedAt BIGINT,
@@ -78,6 +81,7 @@ class DatabaseManager {
             )
         `);
 
+        // Logs table
         await this.pool.execute(`
             CREATE TABLE IF NOT EXISTS logs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -88,6 +92,7 @@ class DatabaseManager {
             )
         `);
 
+        // Card brands table
         await this.pool.execute(`
             CREATE TABLE IF NOT EXISTS card_brands (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -95,6 +100,7 @@ class DatabaseManager {
             )
         `);
 
+        // Insert default card brands
         const brands = [
             'Amazon', 'Steam', 'Sephora', 'Nordstrom', 'Walmart Visa',
             'Google Play', 'Amex', 'Apple', 'Macy\'s', 'Footlocker',
@@ -126,6 +132,8 @@ class DatabaseManager {
         return rows[0] || null;
     }
 
+    // ===== USER METHODS =====
+    
     async getUser(userId) {
         return await this.getOne('SELECT * FROM users WHERE userId = ?', [userId]);
     }
@@ -174,6 +182,8 @@ class DatabaseManager {
         await this.log('payment_set', userId, `Set ${method} payment method`);
     }
 
+    // ===== TRANSACTION METHODS =====
+    
     async createTransaction(data) {
         const txId = 'CV-' + Date.now().toString(36).toUpperCase() + 
                      Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -181,8 +191,8 @@ class DatabaseManager {
         await this.query(
             `INSERT INTO transactions (
                 txId, userId, username, paymentMethod, paymentDetail,
-                brand, value, currency, image, status, submittedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                brand, value, image, status, submittedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 txId,
                 data.userId,
@@ -191,14 +201,13 @@ class DatabaseManager {
                 data.paymentDetail,
                 data.brand,
                 data.value,
-                data.currency || 'USD',
                 data.image,
                 'pending',
                 Date.now()
             ]
         );
         
-        await this.log('transaction_created', data.userId, `Created transaction ${txId} (${data.currency || 'USD'})`);
+        await this.log('transaction_created', data.userId, `Created transaction ${txId}`);
         return txId;
     }
 
@@ -227,7 +236,7 @@ class DatabaseManager {
     
     async updateTransactionOffer(txId, offerAmount) {
         await this.query('UPDATE transactions SET offerAmount = ? WHERE txId = ?', [offerAmount, txId]);
-        await this.log('offer_updated', txId, `Offer amount set to ${offerAmount}`);
+        await this.log('offer_updated', txId, `Offer amount set to $${offerAmount}`);
     }
 
     async getPendingTransactions() {
@@ -243,11 +252,15 @@ class DatabaseManager {
         );
     }
 
+    // ===== BRAND METHODS =====
+    
     async getCardBrands() {
         const rows = await this.query('SELECT name FROM card_brands ORDER BY name');
         return rows.map(b => b.name);
     }
 
+    // ===== STATS METHODS =====
+    
     async incrementUserStats(userId, value) {
         const user = await this.getUser(userId);
         if (user) {
@@ -264,6 +277,8 @@ class DatabaseManager {
         );
     }
 
+    // ===== LOGGING =====
+    
     async log(action, userId, details) {
         console.log(`[LOG] ${new Date().toLocaleTimeString()} | ${action} | ${userId} | ${details}`);
         
