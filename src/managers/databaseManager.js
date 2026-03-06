@@ -60,7 +60,7 @@ class DatabaseManager {
             )
         `);
 
-        // Transactions table
+        // Transactions table - UPDATED with currency column
         await this.pool.execute(`
             CREATE TABLE IF NOT EXISTS transactions (
                 txId VARCHAR(255) PRIMARY KEY,
@@ -70,6 +70,7 @@ class DatabaseManager {
                 paymentDetail TEXT,
                 brand TEXT,
                 value INT,
+                currency VARCHAR(10) DEFAULT 'USD',  // ← NEW COLUMN ADDED
                 image TEXT,
                 status VARCHAR(50) DEFAULT 'pending',
                 submittedAt BIGINT,
@@ -184,6 +185,7 @@ class DatabaseManager {
 
     // ===== TRANSACTION METHODS =====
     
+    // 🔥 UPDATED: Now includes currency in insert
     async createTransaction(data) {
         const txId = 'CV-' + Date.now().toString(36).toUpperCase() + 
                      Math.random().toString(36).substring(2, 5).toUpperCase();
@@ -191,8 +193,8 @@ class DatabaseManager {
         await this.query(
             `INSERT INTO transactions (
                 txId, userId, username, paymentMethod, paymentDetail,
-                brand, value, image, status, submittedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                brand, value, currency, image, status, submittedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 txId,
                 data.userId,
@@ -201,13 +203,14 @@ class DatabaseManager {
                 data.paymentDetail,
                 data.brand,
                 data.value,
+                data.currency || 'USD',  // ← NEW: Save currency from session
                 data.image,
                 'pending',
                 Date.now()
             ]
         );
         
-        await this.log('transaction_created', data.userId, `Created transaction ${txId}`);
+        await this.log('transaction_created', data.userId, `Created transaction ${txId} (${data.currency || 'USD'})`);
         return txId;
     }
 
@@ -236,7 +239,7 @@ class DatabaseManager {
     
     async updateTransactionOffer(txId, offerAmount) {
         await this.query('UPDATE transactions SET offerAmount = ? WHERE txId = ?', [offerAmount, txId]);
-        await this.log('offer_updated', txId, `Offer amount set to $${offerAmount}`);
+        await this.log('offer_updated', txId, `Offer amount set to ${offerAmount}`);
     }
 
     async getPendingTransactions() {
